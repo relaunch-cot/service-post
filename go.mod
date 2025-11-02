@@ -2,10 +2,16 @@ module github.com/relaunch-cot/service-post
 
 go 1.24.9
 
-require google.golang.org/grpc v1.76.0
+require (
+	github.com/golang/protobuf v1.5.4
+	github.com/google/uuid v1.6.0
+	github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102203610-76c27b484fe2
+	google.golang.org/grpc v1.76.0
+)
 
 require (
-	github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102185609-b3d9fb0836d7 // indirect
+	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect

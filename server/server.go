@@ -1,15 +1,53 @@
 package server
 
-import "github.com/relaunch-cot/service-post/handler"
+import (
+	"context"
+
+	"github.com/golang/protobuf/ptypes/empty"
+	pb "github.com/relaunch-cot/lib-relaunch-cot/proto/post"
+	"github.com/relaunch-cot/service-post/handler"
+)
 
 type postResource struct {
 	handler *handler.Handlers
+	pb.UnimplementedPostServiceServer
 }
 
-type IPostServer interface {
+func (r *postResource) CreatePost(ctx context.Context, in *pb.CreatePostRequest) (*empty.Empty, error) {
+	err := r.handler.Post.CreatePost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return &empty.Empty{}, nil
 }
 
-func NewPostServer(handler *handler.Handlers) IPostServer {
+func (r *postResource) GetPost(ctx context.Context, in *pb.GetPostRequest) (*pb.GetPostResponse, error) {
+	// Implementation goes here
+	return nil, nil
+}
+
+func (r *postResource) GetAllPosts(ctx context.Context, in *pb.GetAllPostsRequest) (*pb.GetAllPostsResponse, error) {
+	// Implementation goes here
+	return nil, nil
+}
+
+func (r *postResource) GetAllPostsFromUser(ctx context.Context, in *pb.GetAllPostsFromUserRequest) (*pb.GetAllPostsFromUserResponse, error) {
+	// Implementation goes here
+	return nil, nil
+}
+
+func (r *postResource) UpdatePost(ctx context.Context, in *pb.UpdatePostRequest) (*empty.Empty, error) {
+	// Implementation goes here
+	return &empty.Empty{}, nil
+}
+
+func (r *postResource) DeletePost(ctx context.Context, in *pb.DeletePostRequest) (*empty.Empty, error) {
+	// Implementation goes here
+	return &empty.Empty{}, nil
+}
+
+func NewPostServer(handler *handler.Handlers) pb.PostServiceServer {
 	return &postResource{
 		handler: handler,
 	}
