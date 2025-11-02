@@ -23,13 +23,19 @@ func (r *postResource) CreatePost(ctx context.Context, in *pb.CreatePostRequest)
 }
 
 func (r *postResource) GetPost(ctx context.Context, in *pb.GetPostRequest) (*pb.GetPostResponse, error) {
-	// Implementation goes here
-	return nil, nil
+	response, err := r.handler.Post.GetPost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
-func (r *postResource) GetAllPosts(ctx context.Context, in *pb.GetAllPostsRequest) (*pb.GetAllPostsResponse, error) {
-	// Implementation goes here
-	return nil, nil
+func (r *postResource) GetAllPosts(ctx context.Context, in *empty.Empty) (*pb.GetAllPostsResponse, error) {
+	response, err := r.handler.Post.GetAllPosts(&ctx)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (r *postResource) GetAllPostsFromUser(ctx context.Context, in *pb.GetAllPostsFromUserRequest) (*pb.GetAllPostsFromUserResponse, error) {

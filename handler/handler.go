@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	pb "github.com/relaunch-cot/lib-relaunch-cot/proto/post"
 	"github.com/relaunch-cot/service-post/repositories"
+	"github.com/relaunch-cot/service-post/resource/transformer"
 )
 
 type resource struct {
@@ -14,6 +15,8 @@ type resource struct {
 
 type IPostHandler interface {
 	CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error
+	GetPost(ctx *context.Context, in *pb.GetPostRequest) (*pb.GetPostResponse, error)
+	GetAllPosts(ctx *context.Context) (*pb.GetAllPostsResponse, error)
 }
 
 func (r *resource) CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error {
@@ -24,6 +27,42 @@ func (r *resource) CreatePost(ctx *context.Context, in *pb.CreatePostRequest) er
 	}
 
 	return nil
+}
+
+func (r *resource) GetPost(ctx *context.Context, in *pb.GetPostRequest) (*pb.GetPostResponse, error) {
+	response, err := r.repositories.Mysql.GetPost(ctx, in.PostId)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsPost, err := transformer.GetPostToBaseModels(response)
+	if err != nil {
+		return nil, err
+	}
+
+	getPostResponse := &pb.GetPostResponse{
+		Post: baseModelsPost,
+	}
+
+	return getPostResponse, nil
+}
+
+func (r *resource) GetAllPosts(ctx *context.Context) (*pb.GetAllPostsResponse, error) {
+	response, err := r.repositories.Mysql.GetAllPosts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsPosts, err := transformer.GetAllPostsToBaseModels(response)
+	if err != nil {
+		return nil, err
+	}
+
+	getAllPostsResponse := &pb.GetAllPostsResponse{
+		Posts: baseModelsPosts,
+	}
+
+	return getAllPostsResponse, nil
 }
 
 func NewPostHandler(repositories *repositories.Repositories) IPostHandler {

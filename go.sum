@@ -16,6 +16,8 @@ github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102193023-8609f0707a26 h1:2
 github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102193023-8609f0707a26/go.mod h1:AnBqPVRdO0Fr/Cscv1OszBA5hDJCM4LylAvj39riXws=
 github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102203610-76c27b484fe2 h1:qOu1bwwY3h+sbUkMEfZy4Te08HnKH1tk3WHZexbrF4E=
 github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102203610-76c27b484fe2/go.mod h1:AnBqPVRdO0Fr/Cscv1OszBA5hDJCM4LylAvj39riXws=
+github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102214301-d6c5f6495351 h1:U1ts4/+D0jSSd+AlSiDDpVtsmjweh1V5U68opD87XiU=
+github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251102214301-d6c5f6495351/go.mod h1:AnBqPVRdO0Fr/Cscv1OszBA5hDJCM4LylAvj39riXws=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
 go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
 go.opentelemetry.io/otel v1.37.0 h1:9zhNfelUvx0KBfu/gb+ZgeAfAgtWrfHJZcAqFC228wQ=
