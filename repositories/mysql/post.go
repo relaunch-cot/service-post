@@ -26,6 +26,8 @@ func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, 
 
 	if urlImagePost == "" {
 		urlImagePost = "NULL"
+	} else {
+		urlImagePost = fmt.Sprintf("'%s'", urlImagePost)
 	}
 	baseQuery := fmt.Sprintf(`INSERT INTO posts (authorId, postId, title, content, type, urlImagePost, createdAt) VALUES (?, ?, ?, ?, ?, %s, ?)`, urlImagePost)
 	_, err := mysql.DB.ExecContext(*ctx, baseQuery, userId, postId, title, content, postType, currentTime)
@@ -94,7 +96,8 @@ SELECT
 	p.createdAt, 
 	IFNULL(p.updatedAt, "")
 FROM posts p 
-	JOIN users u ON p.authorId = u.userId`
+	JOIN users u ON p.authorId = u.userId
+ORDER BY p.createdAt DESC`
 
 	rows, err := mysql.DB.QueryContext(*ctx, query)
 	if err != nil {
