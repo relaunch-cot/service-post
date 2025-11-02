@@ -30,7 +30,7 @@ func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, 
 		urlImagePost = fmt.Sprintf("'%s'", urlImagePost)
 	}
 	baseQuery := fmt.Sprintf(`INSERT INTO posts (authorId, postId, title, content, type, urlImagePost, createdAt) VALUES (?, ?, ?, ?, ?, %s, ?)`, urlImagePost)
-	_, err := mysql.DB.ExecContext(*ctx, baseQuery, userId, postId, title, content, postType, currentTime)
+	_, err := mysql.DB.ExecContext(*ctx, baseQuery, userId, postId, title, content, postType, currentTime.Format("2006-01-02 15:04:05"))
 	if err != nil {
 		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
