@@ -17,6 +17,7 @@ type IPostHandler interface {
 	CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error
 	GetPost(ctx *context.Context, in *pb.GetPostRequest) (*pb.GetPostResponse, error)
 	GetAllPosts(ctx *context.Context) (*pb.GetAllPostsResponse, error)
+	UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error)
 }
 
 func (r *resource) CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error {
@@ -63,6 +64,29 @@ func (r *resource) GetAllPosts(ctx *context.Context) (*pb.GetAllPostsResponse, e
 	}
 
 	return getAllPostsResponse, nil
+}
+
+func (r *resource) UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error) {
+	err := r.repositories.Mysql.UpdatePost(ctx, in.PostId, in.UserId, in.Title, in.Content, in.UrlImagePost)
+	if err != nil {
+		return nil, err
+	}
+
+	post, err := r.repositories.Mysql.GetPost(ctx, in.PostId)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsPost, err := transformer.GetPostToBaseModels(post)
+	if err != nil {
+		return nil, err
+	}
+
+	updatePostResponse := &pb.UpdatePostResponse{
+		Post: baseModelsPost,
+	}
+
+	return updatePostResponse, nil
 }
 
 func NewPostHandler(repositories *repositories.Repositories) IPostHandler {

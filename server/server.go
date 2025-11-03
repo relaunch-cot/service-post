@@ -43,9 +43,13 @@ func (r *postResource) GetAllPostsFromUser(ctx context.Context, in *pb.GetAllPos
 	return nil, nil
 }
 
-func (r *postResource) UpdatePost(ctx context.Context, in *pb.UpdatePostRequest) (*empty.Empty, error) {
-	// Implementation goes here
-	return &empty.Empty{}, nil
+func (r *postResource) UpdatePost(ctx context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error) {
+	response, err := r.handler.Post.UpdatePost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 func (r *postResource) DeletePost(ctx context.Context, in *pb.DeletePostRequest) (*empty.Empty, error) {
