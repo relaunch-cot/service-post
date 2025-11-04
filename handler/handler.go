@@ -17,6 +17,7 @@ type IPostHandler interface {
 	CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error
 	GetPost(ctx *context.Context, in *pb.GetPostRequest) (*pb.GetPostResponse, error)
 	GetAllPosts(ctx *context.Context) (*pb.GetAllPostsResponse, error)
+	GetAllPostsFromUser(ctx *context.Context, in *pb.GetAllPostsFromUserRequest) (*pb.GetAllPostsFromUserResponse, error)
 	UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error)
 	DeletePost(ctx *context.Context, in *pb.DeletePostRequest) error
 }
@@ -65,6 +66,24 @@ func (r *resource) GetAllPosts(ctx *context.Context) (*pb.GetAllPostsResponse, e
 	}
 
 	return getAllPostsResponse, nil
+}
+
+func (r *resource) GetAllPostsFromUser(ctx *context.Context, in *pb.GetAllPostsFromUserRequest) (*pb.GetAllPostsFromUserResponse, error) {
+	response, err := r.repositories.Mysql.GetAllPostsFromUser(ctx, in.UserId)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsPosts, err := transformer.GetAllPostsFromUserToBaseModels(response)
+	if err != nil {
+		return nil, err
+	}
+
+	getAllPostsFromUserResponse := &pb.GetAllPostsFromUserResponse{
+		Posts: baseModelsPosts,
+	}
+
+	return getAllPostsFromUserResponse, nil
 }
 
 func (r *resource) UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error) {

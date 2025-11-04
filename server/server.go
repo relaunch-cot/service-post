@@ -39,8 +39,12 @@ func (r *postResource) GetAllPosts(ctx context.Context, in *empty.Empty) (*pb.Ge
 }
 
 func (r *postResource) GetAllPostsFromUser(ctx context.Context, in *pb.GetAllPostsFromUserRequest) (*pb.GetAllPostsFromUserResponse, error) {
-	// Implementation goes here
-	return nil, nil
+	response, err := r.handler.Post.GetAllPostsFromUser(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 func (r *postResource) UpdatePost(ctx context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error) {

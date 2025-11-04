@@ -19,6 +19,7 @@ type IMySqlPost interface {
 	CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error
 	GetPost(ctx *context.Context, postId string) (*libModels.Post, error)
 	GetAllPosts(ctx *context.Context) ([]*libModels.Post, error)
+	GetAllPostsFromUser(ctx *context.Context, userId string) ([]*libModels.Post, error)
 	UpdatePost(ctx *context.Context, postId, userId, title, content, urlImagePost string) error
 	DeletePost(ctx *context.Context, postId, userId string) error
 }
@@ -102,6 +103,54 @@ FROM posts p
 ORDER BY p.createdAt DESC`
 
 	rows, err := mysql.DB.QueryContext(*ctx, query)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rows.Close()
+
+	posts := make([]*libModels.Post, 0)
+	for rows.Next() {
+		p := &libModels.Post{}
+		err = rows.Scan(
+			&p.PostId,
+			&p.AuthorId,
+			&p.AuthorName,
+			&p.Title,
+			&p.Content,
+			&p.Type,
+			&p.UrlImagePost,
+			&p.CreatedAt,
+			&p.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		}
+		posts = append(posts, p)
+	}
+
+	return posts, nil
+}
+
+func (m *mysqlResource) GetAllPostsFromUser(ctx *context.Context, userId string) ([]*libModels.Post, error) {
+	query := `
+SELECT 
+	p.postId,
+	p.authorId,
+	u.name,
+	p.title,
+	p.content,
+	p.type,
+	IFNULL(p.urlImagePost, "") AS urlImagePost,
+	p.createdAt, 
+	IFNULL(p.updatedAt, "") AS updatedAt
+FROM posts p 
+	JOIN users u ON p.authorId = u.userId
+WHERE p.authorId = ?
+ORDER BY p.createdAt DESC`
+
+	rows, err := mysql.DB.QueryContext(*ctx, query, userId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}

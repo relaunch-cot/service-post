@@ -35,3 +35,15 @@ func GetAllPostsToBaseModels(posts []*libModels.Post) ([]*pbBaseModels.Post, err
 	}
 	return pbPosts, nil
 }
+
+func GetAllPostsFromUserToBaseModels(posts []*libModels.Post) ([]*pbBaseModels.Post, error) {
+	var pbPosts []*pbBaseModels.Post
+	for _, post := range posts {
+		pbPost, err := GetPostToBaseModels(post)
+		if err != nil {
+			return nil, err
+		}
+		pbPosts = append(pbPosts, pbPost)
+	}
+	return pbPosts, nil
+}
