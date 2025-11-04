@@ -47,3 +47,18 @@ func GetAllPostsFromUserToBaseModels(posts []*libModels.Post) ([]*pbBaseModels.P
 	}
 	return pbPosts, nil
 }
+
+func GetLikesFromPostToBaseModels(postLikes *libModels.PostLikes) (*pbBaseModels.PostLikes, error) {
+	var pbPostLikes *pbBaseModels.PostLikes
+	b, err := json.Marshal(postLikes)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error marshalling post likes. Details: "+err.Error())
+	}
+
+	err = json.Unmarshal(b, &pbPostLikes)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error unmarshalling post likes. Details: "+err.Error())
+	}
+
+	return pbPostLikes, nil
+}

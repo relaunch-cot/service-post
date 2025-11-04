@@ -20,6 +20,7 @@ type IPostHandler interface {
 	GetAllPostsFromUser(ctx *context.Context, in *pb.GetAllPostsFromUserRequest) (*pb.GetAllPostsFromUserResponse, error)
 	UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error)
 	DeletePost(ctx *context.Context, in *pb.DeletePostRequest) error
+	UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error)
 }
 
 func (r *resource) CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error {
@@ -116,6 +117,29 @@ func (r *resource) DeletePost(ctx *context.Context, in *pb.DeletePostRequest) er
 	}
 
 	return nil
+}
+
+func (r *resource) UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error) {
+	err := r.repositories.Mysql.UpdateLikesFromPost(ctx, in.PostId, in.UserId, in.Liked)
+	if err != nil {
+		return nil, err
+	}
+
+	likesFromPost, err := r.repositories.Mysql.GetLikesFromPost(ctx, in.PostId)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsLikesFromPost, err := transformer.GetLikesFromPostToBaseModels(likesFromPost)
+	if err != nil {
+		return nil, err
+	}
+
+	updateLikesFromPostResponse := &pb.UpdateLikesFromPostResponse{
+		LikesFromPost: baseModelsLikesFromPost,
+	}
+
+	return updateLikesFromPostResponse, nil
 }
 
 func NewPostHandler(repositories *repositories.Repositories) IPostHandler {

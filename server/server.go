@@ -65,6 +65,15 @@ func (r *postResource) DeletePost(ctx context.Context, in *pb.DeletePostRequest)
 	return &empty.Empty{}, nil
 }
 
+func (r *postResource) UpdateLikesFromPost(ctx context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error) {
+	response, err := r.handler.Post.UpdateLikesFromPost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func NewPostServer(handler *handler.Handlers) pb.PostServiceServer {
 	return &postResource{
 		handler: handler,
