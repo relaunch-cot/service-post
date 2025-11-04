@@ -53,7 +53,11 @@ func (r *postResource) UpdatePost(ctx context.Context, in *pb.UpdatePostRequest)
 }
 
 func (r *postResource) DeletePost(ctx context.Context, in *pb.DeletePostRequest) (*empty.Empty, error) {
-	// Implementation goes here
+	err := r.handler.Post.DeletePost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
 	return &empty.Empty{}, nil
 }
 

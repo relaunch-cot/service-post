@@ -18,6 +18,7 @@ type IPostHandler interface {
 	GetPost(ctx *context.Context, in *pb.GetPostRequest) (*pb.GetPostResponse, error)
 	GetAllPosts(ctx *context.Context) (*pb.GetAllPostsResponse, error)
 	UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error)
+	DeletePost(ctx *context.Context, in *pb.DeletePostRequest) error
 }
 
 func (r *resource) CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error {
@@ -87,6 +88,15 @@ func (r *resource) UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*
 	}
 
 	return updatePostResponse, nil
+}
+
+func (r *resource) DeletePost(ctx *context.Context, in *pb.DeletePostRequest) error {
+	err := r.repositories.Mysql.DeletePost(ctx, in.PostId, in.UserId)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func NewPostHandler(repositories *repositories.Repositories) IPostHandler {

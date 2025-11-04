@@ -20,6 +20,7 @@ type IMySqlPost interface {
 	GetPost(ctx *context.Context, postId string) (*libModels.Post, error)
 	GetAllPosts(ctx *context.Context) ([]*libModels.Post, error)
 	UpdatePost(ctx *context.Context, postId, userId, title, content, urlImagePost string) error
+	DeletePost(ctx *context.Context, postId, userId string) error
 }
 
 func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error {
@@ -55,7 +56,7 @@ SELECT
 	IFNULL(p.updatedAt, "") AS updatedAt
 FROM posts p 
 	JOIN users u ON p.authorId = u.userId
-WHERE postId = ?`
+WHERE p.postId = ?`
 	rows, err := mysql.DB.QueryContext(*ctx, query, postId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
@@ -141,7 +142,7 @@ SELECT
 	p.content,
 	IFNULL(p.urlImagePost, "") AS urlImagePost
 FROM posts p 
-WHERE postId = ?`
+WHERE p.postId = ?`
 
 	var p libModels.Post
 	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, postId)
@@ -160,7 +161,7 @@ WHERE postId = ?`
 	}
 
 	if p.AuthorId != userId {
-		return status.Error(codes.PermissionDenied, "user not authorized to update this post")
+		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
 	}
 
 	var setParts []string
@@ -186,6 +187,42 @@ WHERE postId = ?`
 	updateQuery := fmt.Sprintf(`UPDATE posts SET updatedAt = ?, %s WHERE postId = '%s'`, setClause, postId)
 
 	_, err = mysql.DB.ExecContext(*ctx, updateQuery, currentTime.Format("2006-01-02 15:04:05"))
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return nil
+}
+
+func (m *mysqlResource) DeletePost(ctx *context.Context, postId, userId string) error {
+	queryValidate := `
+SELECT 
+	p.authorId
+FROM posts p 
+WHERE p.postId = ?`
+
+	var authorId string
+	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, postId)
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rows.Close()
+	if !rows.Next() {
+		return status.Error(codes.NotFound, "post not found")
+	}
+
+	err = rows.Scan(&authorId)
+	if err != nil {
+		return status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+	}
+
+	if authorId != userId {
+		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+	}
+
+	deleteQuery := `DELETE FROM posts WHERE postId = ?`
+	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, postId)
 	if err != nil {
 		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
