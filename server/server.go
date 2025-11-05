@@ -83,6 +83,15 @@ func (r *postResource) AddCommentToPost(ctx context.Context, in *pb.AddCommentTo
 	return response, nil
 }
 
+func (r *postResource) RemoveCommentFromPost(ctx context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error) {
+	response, err := r.handler.Post.RemoveCommentFromPost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func NewPostServer(handler *handler.Handlers) pb.PostServiceServer {
 	return &postResource{
 		handler: handler,

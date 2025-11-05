@@ -22,6 +22,7 @@ type IPostHandler interface {
 	DeletePost(ctx *context.Context, in *pb.DeletePostRequest) error
 	UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error)
 	AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPostRequest) (*pb.AddCommentToPostResponse, error)
+	RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error)
 }
 
 func (r *resource) CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error {
@@ -165,6 +166,29 @@ func (r *resource) AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPos
 	}
 
 	return addCommentToPostResponse, nil
+}
+
+func (r *resource) RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error) {
+	err := r.repositories.Mysql.RemoveCommentFromPost(ctx, in.PostId, in.CommentId, in.UserId)
+	if err != nil {
+		return nil, err
+	}
+
+	comment, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsComment, err := transformer.GetAllCommentsFromPostToBaseModels(comment)
+	if err != nil {
+		return nil, err
+	}
+
+	removeCommentFromPostResponse := &pb.RemoveCommentFromPostResponse{
+		CommentsFromPost: baseModelsComment,
+	}
+
+	return removeCommentFromPostResponse, nil
 }
 
 func NewPostHandler(repositories *repositories.Repositories) IPostHandler {

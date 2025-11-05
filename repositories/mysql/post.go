@@ -27,6 +27,7 @@ type IMySqlPost interface {
 	UpdateLikesFromPost(ctx *context.Context, postId, userId string, liked bool) error
 	GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error)
 	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error
+	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) error
 }
 
 func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error {
@@ -546,6 +547,43 @@ WHERE u.userId = ?`
 
 	return nil
 }
+
+func (m *mysqlResource) RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) error {
+	queryValidate := `
+SELECT 
+	c.userId
+FROM comments c 
+WHERE c.commentId = ? AND c.postId = ?`
+
+	var commentUserId string
+	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, commentId, postId)
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rows.Close()
+	if !rows.Next() {
+		return status.Error(codes.NotFound, "comment not found")
+	}
+
+	err = rows.Scan(&commentUserId)
+	if err != nil {
+		return status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+	}
+
+	if commentUserId != userId {
+		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+	}
+
+	deleteQuery := `DELETE FROM comments WHERE commentId = ? AND postId = ?`
+	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, commentId, postId)
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return nil
+}
+
 func NewMysqlRepository(mysqlClient *mysql.Client) IMySqlPost {
 	return &mysqlResource{
 		mysqlClient: mysqlClient,
