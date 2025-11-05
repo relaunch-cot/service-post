@@ -25,6 +25,8 @@ type IMySqlPost interface {
 	DeletePost(ctx *context.Context, postId, userId string) error
 	GetLikesFromPost(ctx *context.Context, postId string) (*libModels.PostLikes, error)
 	UpdateLikesFromPost(ctx *context.Context, postId, userId string, liked bool) error
+	GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error)
+	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error
 }
 
 func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error {
@@ -463,6 +465,87 @@ WHERE u.userId = ?`
 	return nil
 }
 
+func (m *mysqlResource) GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error) {
+	comments := make([]libModels.Comment, 0)
+
+	query := `
+SELECT 
+	c.commentId,
+	c.userId,
+	c.userName,
+	c.content,
+	c.createdAt,
+	IFNULL(c.updatedAt, "") AS updatedAt
+FROM comments c 
+WHERE c.postId = ?
+ORDER BY c.createdAt DESC`
+
+	rows, err := mysql.DB.QueryContext(*ctx, query, postId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var comment libModels.Comment
+		err = rows.Scan(
+			&comment.CommentId,
+			&comment.UserId,
+			&comment.UserName,
+			&comment.Content,
+			&comment.CreatedAt,
+			&comment.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		}
+
+		comments = append(comments, comment)
+	}
+
+	result := &libModels.PostComments{
+		Comments:      comments,
+		CommentsCount: int64(len(comments)),
+	}
+
+	return result, nil
+}
+
+func (m *mysqlResource) AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error {
+	currentTime := time.Now()
+	var userName string
+
+	queryValidateUser := `
+SELECT 
+	u.name
+FROM users u 
+WHERE u.userId = ?`
+
+	rowUser, err := mysql.DB.QueryContext(*ctx, queryValidateUser, userId)
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rowUser.Close()
+	if !rowUser.Next() {
+		return status.Error(codes.NotFound, "user not found")
+	}
+
+	err = rowUser.Scan(&userName)
+	if err != nil {
+		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
+	}
+
+	baseQuery := `INSERT INTO comments (commentId, postId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, postId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return nil
+}
 func NewMysqlRepository(mysqlClient *mysql.Client) IMySqlPost {
 	return &mysqlResource{
 		mysqlClient: mysqlClient,

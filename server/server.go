@@ -74,6 +74,15 @@ func (r *postResource) UpdateLikesFromPost(ctx context.Context, in *pb.UpdateLik
 	return response, nil
 }
 
+func (r *postResource) AddCommentToPost(ctx context.Context, in *pb.AddCommentToPostRequest) (*pb.AddCommentToPostResponse, error) {
+	response, err := r.handler.Post.AddCommentToPost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func NewPostServer(handler *handler.Handlers) pb.PostServiceServer {
 	return &postResource{
 		handler: handler,
