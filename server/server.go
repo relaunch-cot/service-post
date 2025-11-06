@@ -65,6 +65,15 @@ func (r *postResource) DeletePost(ctx context.Context, in *pb.DeletePostRequest)
 	return &empty.Empty{}, nil
 }
 
+func (r *postResource) GetLikesFromPost(ctx context.Context, in *pb.GetLikesFromPostRequest) (*pb.GetLikesFromPostResponse, error) {
+	response, err := r.handler.Post.GetLikesFromPost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (r *postResource) UpdateLikesFromPost(ctx context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error) {
 	response, err := r.handler.Post.UpdateLikesFromPost(&ctx, in)
 	if err != nil {
@@ -85,6 +94,15 @@ func (r *postResource) AddCommentToPost(ctx context.Context, in *pb.AddCommentTo
 
 func (r *postResource) RemoveCommentFromPost(ctx context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error) {
 	response, err := r.handler.Post.RemoveCommentFromPost(&ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (r *postResource) GetAllCommentsFromPost(ctx context.Context, in *pb.GetAllCommentsFromPostRequest) (*pb.GetAllCommentsFromPostResponse, error) {
+	response, err := r.handler.Post.GetAllCommentsFromPost(&ctx, in)
 	if err != nil {
 		return nil, err
 	}

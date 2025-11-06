@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -23,11 +22,11 @@ type IMySqlPost interface {
 	GetAllPostsFromUser(ctx *context.Context, userId string) ([]*libModels.Post, error)
 	UpdatePost(ctx *context.Context, postId, userId, title, content, urlImagePost string) error
 	DeletePost(ctx *context.Context, postId, userId string) error
-	GetLikesFromPost(ctx *context.Context, postId string) (*libModels.PostLikes, error)
+	GetLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error)
 	UpdateLikesFromPost(ctx *context.Context, postId, userId string) error
 	GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error)
-	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) (*libModels.PostComments, error)
-	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) (*libModels.PostComments, error)
+	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error
+	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) error
 }
 
 func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error {
@@ -59,8 +58,6 @@ SELECT
     p.content,
     p.type,
    	IFNULL(p.urlImagePost, "") AS urlImagePost,
-   	IFNULL(p.likes, "") AS likes,
-	IFNULL(p.comments, "") AS comments,
 	p.createdAt, 
 	IFNULL(p.updatedAt, "") AS updatedAt
 FROM posts p 
@@ -76,9 +73,6 @@ WHERE p.postId = ?`
 		return nil, status.Error(codes.NotFound, "post not found")
 	}
 
-	var likes string
-	var comments string
-
 	err = rows.Scan(
 		&post.PostId,
 		&post.AuthorId,
@@ -87,27 +81,11 @@ WHERE p.postId = ?`
 		&post.Content,
 		&post.Type,
 		&post.UrlImagePost,
-		&likes,
-		&comments,
 		&post.CreatedAt,
 		&post.UpdatedAt,
 	)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
-	}
-
-	if likes != "" {
-		err = json.Unmarshal([]byte(likes), &post.Likes)
-		if err != nil {
-			return nil, status.Error(codes.Internal, "error unmarshalling likes data: "+err.Error())
-		}
-	}
-
-	if comments != "" {
-		err = json.Unmarshal([]byte(comments), &post.Comments)
-		if err != nil {
-			return nil, status.Error(codes.Internal, "error unmarshalling comments data: "+err.Error())
-		}
 	}
 
 	return &post, nil
@@ -123,8 +101,6 @@ SELECT
 	p.content,
 	p.type,
 	IFNULL(p.urlImagePost, "") AS urlImagePost,
-	IFNULL(p.likes, "") AS likes,
-	IFNULL(p.comments, "") AS comments,
 	p.createdAt, 
 	IFNULL(p.updatedAt, "") AS updatedAt
 FROM posts p 
@@ -140,9 +116,6 @@ ORDER BY p.createdAt DESC`
 
 	posts := make([]*libModels.Post, 0)
 
-	var likes string
-	var comments string
-
 	for rows.Next() {
 		p := &libModels.Post{}
 		err = rows.Scan(
@@ -153,28 +126,12 @@ ORDER BY p.createdAt DESC`
 			&p.Content,
 			&p.Type,
 			&p.UrlImagePost,
-			&likes,
-			&comments,
 			&p.CreatedAt,
 			&p.UpdatedAt,
 		)
 
 		if err != nil {
 			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
-		}
-
-		if likes != "" {
-			err = json.Unmarshal([]byte(likes), &p.Likes)
-			if err != nil {
-				return nil, status.Error(codes.Internal, "error unmarshalling likes data: "+err.Error())
-			}
-		}
-
-		if comments != "" {
-			err = json.Unmarshal([]byte(comments), &p.Comments)
-			if err != nil {
-				return nil, status.Error(codes.Internal, "error unmarshalling comments data: "+err.Error())
-			}
 		}
 
 		posts = append(posts, p)
@@ -194,8 +151,6 @@ SELECT
 	p.content,
 	p.type,
 	IFNULL(p.urlImagePost, "") AS urlImagePost,
-	IFNULL(p.likes, "") AS likes,
-	IFNULL(p.comments, "") AS comments,
 	p.createdAt, 
 	IFNULL(p.updatedAt, "") AS updatedAt
 FROM posts p 
@@ -211,9 +166,6 @@ ORDER BY p.createdAt DESC`
 
 	posts := make([]*libModels.Post, 0)
 
-	var likes string
-	var comments string
-
 	for rows.Next() {
 		p := &libModels.Post{}
 		err = rows.Scan(
@@ -224,28 +176,12 @@ ORDER BY p.createdAt DESC`
 			&p.Content,
 			&p.Type,
 			&p.UrlImagePost,
-			&likes,
-			&comments,
 			&p.CreatedAt,
 			&p.UpdatedAt,
 		)
 
 		if err != nil {
 			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
-		}
-
-		if likes != "" {
-			err = json.Unmarshal([]byte(likes), &p.Likes)
-			if err != nil {
-				return nil, status.Error(codes.Internal, "error unmarshalling likes data: "+err.Error())
-			}
-		}
-
-		if comments != "" {
-			err = json.Unmarshal([]byte(comments), &p.Comments)
-			if err != nil {
-				return nil, status.Error(codes.Internal, "error unmarshalling comments data: "+err.Error())
-			}
 		}
 
 		posts = append(posts, p)
@@ -352,58 +288,45 @@ WHERE p.postId = ?`
 	return nil
 }
 
-func (m *mysqlResource) GetLikesFromPost(ctx *context.Context, postId string) (*libModels.PostLikes, error) {
+func (m *mysqlResource) GetLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error) {
 	postLikes := new(libModels.PostLikes)
 
 	query := `
 SELECT 
-    IFNULL(p.likes, "") AS likes
-FROM posts p
-	JOIN users u ON p.authorId = u.userId
-WHERE p.postId = ?`
+    l.userId,
+    l.userName,
+	l.likedAt
+FROM likes l
+WHERE l.postId = ?`
 	rows, err := mysql.DB.QueryContext(*ctx, query, postId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rows.Close()
-	if !rows.Next() {
-		return nil, status.Error(codes.NotFound, "post not found")
-	}
 
-	var likesData string
-	err = rows.Scan(&likesData)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
-	}
-
-	if likesData != "" {
-		err = json.Unmarshal([]byte(likesData), &postLikes)
+	var likes []libModels.Like
+	for rows.Next() {
+		var like libModels.Like
+		err = rows.Scan(
+			&like.UserId,
+			&like.UserName,
+			&like.LikedAt,
+		)
 		if err != nil {
-			return nil, status.Error(codes.Internal, "error unmarshalling likes data: "+err.Error())
+			return nil, status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 		}
+
+		likes = append(likes, like)
 	}
+
+	postLikes.Likes = likes
+	postLikes.LikesCount = int64(len(likes))
 
 	return postLikes, nil
 }
 
 func (m *mysqlResource) UpdateLikesFromPost(ctx *context.Context, postId, userId string) error {
-	queryStartTransaction := `START TRANSACTION`
-	_, err := mysql.DB.ExecContext(*ctx, queryStartTransaction)
-	if err != nil {
-		return status.Error(codes.Internal, "error starting transaction. Details: "+err.Error())
-	}
-
-	defer func() {
-		if err != nil {
-			queryRollback := `ROLLBACK`
-			_, _ = mysql.DB.ExecContext(*ctx, queryRollback)
-		} else {
-			queryCommit := `COMMIT`
-			_, _ = mysql.DB.ExecContext(*ctx, queryCommit)
-		}
-	}()
-
 	currentTime := time.Now()
 	var userName string
 
@@ -427,7 +350,7 @@ WHERE u.userId = ?`
 		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 	}
 
-	postLikes, err := m.GetLikesFromPost(ctx, postId)
+	postLikes, err := m.GetLikesFromPost(ctx, postId, userId)
 	if err != nil {
 		return err
 	}
@@ -446,41 +369,12 @@ WHERE u.userId = ?`
 		if err != nil {
 			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
-
-		newLike := libModels.Like{
-			UserId:  userId,
-			LikedAt: currentTime.Format("2006-01-02 15:04:05"),
-		}
-		postLikes.LikesCount += 1
-		newLike.UserName = userName
-		postLikes.Likes = append(postLikes.Likes, newLike)
 	} else {
 		queryDelete := `DELETE FROM likes WHERE userId = ? AND postId = ?`
 		_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, postId)
 		if err != nil {
 			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
-
-		updatedLikes := make([]libModels.Like, 0)
-		for _, like := range postLikes.Likes {
-			if like.UserId != userId {
-				updatedLikes = append(updatedLikes, like)
-				break
-			}
-		}
-		postLikes.LikesCount -= 1
-		postLikes.Likes = updatedLikes
-	}
-
-	likesData, err := json.Marshal(postLikes)
-	if err != nil {
-		return status.Error(codes.Internal, "error marshalling likes data: "+err.Error())
-	}
-
-	updateQuery := `UPDATE posts SET likes = ? WHERE postId = ?`
-	_, err = mysql.DB.ExecContext(*ctx, updateQuery, string(likesData), postId)
-	if err != nil {
-		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	return nil
@@ -534,23 +428,7 @@ ORDER BY c.createdAt DESC`
 	return result, nil
 }
 
-func (m *mysqlResource) AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) (*libModels.PostComments, error) {
-	queryStartTransaction := `START TRANSACTION`
-	_, err := mysql.DB.ExecContext(*ctx, queryStartTransaction)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "error starting transaction. Details: "+err.Error())
-	}
-
-	defer func() {
-		if err != nil {
-			queryRollback := `ROLLBACK`
-			_, _ = mysql.DB.ExecContext(*ctx, queryRollback)
-		} else {
-			queryCommit := `COMMIT`
-			_, _ = mysql.DB.ExecContext(*ctx, queryCommit)
-		}
-	}()
-
+func (m *mysqlResource) AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error {
 	currentTime := time.Now()
 	var userName string
 
@@ -562,61 +440,29 @@ WHERE u.userId = ?`
 
 	rowUser, err := mysql.DB.QueryContext(*ctx, queryValidateUser, userId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rowUser.Close()
 	if !rowUser.Next() {
-		return nil, status.Error(codes.NotFound, "user not found")
+		return status.Error(codes.NotFound, "user not found")
 	}
 
 	err = rowUser.Scan(&userName)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
+		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 	}
 
 	baseQuery := `INSERT INTO comments (commentId, postId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
 	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, postId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
-	comments, err := m.GetAllCommentsFromPost(ctx, postId)
-	if err != nil {
-		return nil, err
-	}
-
-	commentsData, err := json.Marshal(comments)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "error marshalling comments data: "+err.Error())
-	}
-
-	updateQuery := `UPDATE posts SET comments = ? WHERE postId = ?`
-	_, err = mysql.DB.ExecContext(*ctx, updateQuery, string(commentsData), postId)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
-	}
-
-	return comments, nil
+	return nil
 }
 
-func (m *mysqlResource) RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) (*libModels.PostComments, error) {
-	queryStartTransaction := `START TRANSACTION`
-	_, err := mysql.DB.ExecContext(*ctx, queryStartTransaction)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "error starting transaction. Details: "+err.Error())
-	}
-
-	defer func() {
-		if err != nil {
-			queryRollback := `ROLLBACK`
-			_, _ = mysql.DB.ExecContext(*ctx, queryRollback)
-		} else {
-			queryCommit := `COMMIT`
-			_, _ = mysql.DB.ExecContext(*ctx, queryCommit)
-		}
-	}()
-
+func (m *mysqlResource) RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) error {
 	queryValidate := `
 SELECT 
 	c.userId
@@ -626,46 +472,30 @@ WHERE c.commentId = ? AND c.postId = ?`
 	var commentUserId string
 	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, commentId, postId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rows.Close()
 	if !rows.Next() {
-		return nil, status.Error(codes.NotFound, "comment not found")
+		return status.Error(codes.NotFound, "comment not found")
 	}
 
 	err = rows.Scan(&commentUserId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+		return status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
 	}
 
 	if commentUserId != userId {
-		return nil, status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
 	}
 
 	deleteQuery := `DELETE FROM comments WHERE commentId = ? AND postId = ?`
 	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, commentId, postId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
-	comments, err := m.GetAllCommentsFromPost(ctx, postId)
-	if err != nil {
-		return nil, err
-	}
-
-	commentsData, err := json.Marshal(comments)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "error marshalling comments data: "+err.Error())
-	}
-
-	updateQuery := `UPDATE posts SET comments = ? WHERE postId = ?`
-	_, err = mysql.DB.ExecContext(*ctx, updateQuery, string(commentsData), postId)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
-	}
-
-	return comments, nil
+	return nil
 }
 
 func NewMysqlRepository(mysqlClient *mysql.Client) IMySqlPost {

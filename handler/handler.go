@@ -20,9 +20,11 @@ type IPostHandler interface {
 	GetAllPostsFromUser(ctx *context.Context, in *pb.GetAllPostsFromUserRequest) (*pb.GetAllPostsFromUserResponse, error)
 	UpdatePost(ctx *context.Context, in *pb.UpdatePostRequest) (*pb.UpdatePostResponse, error)
 	DeletePost(ctx *context.Context, in *pb.DeletePostRequest) error
+	GetLikesFromPost(ctx *context.Context, in *pb.GetLikesFromPostRequest) (*pb.GetLikesFromPostResponse, error)
 	UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error)
 	AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPostRequest) (*pb.AddCommentToPostResponse, error)
 	RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error)
+	GetAllCommentsFromPost(ctx *context.Context, in *pb.GetAllCommentsFromPostRequest) (*pb.GetAllCommentsFromPostResponse, error)
 }
 
 func (r *resource) CreatePost(ctx *context.Context, in *pb.CreatePostRequest) error {
@@ -121,13 +123,31 @@ func (r *resource) DeletePost(ctx *context.Context, in *pb.DeletePostRequest) er
 	return nil
 }
 
+func (r *resource) GetLikesFromPost(ctx *context.Context, in *pb.GetLikesFromPostRequest) (*pb.GetLikesFromPostResponse, error) {
+	likesFromPost, err := r.repositories.Mysql.GetLikesFromPost(ctx, in.PostId, in.UserId)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsLikesFromPost, err := transformer.GetLikesFromPostToBaseModels(likesFromPost)
+	if err != nil {
+		return nil, err
+	}
+
+	getLikesFromPostResponse := &pb.GetLikesFromPostResponse{
+		LikesFromPost: baseModelsLikesFromPost,
+	}
+
+	return getLikesFromPostResponse, nil
+}
+
 func (r *resource) UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error) {
 	err := r.repositories.Mysql.UpdateLikesFromPost(ctx, in.PostId, in.UserId)
 	if err != nil {
 		return nil, err
 	}
 
-	likesFromPost, err := r.repositories.Mysql.GetLikesFromPost(ctx, in.PostId)
+	likesFromPost, err := r.repositories.Mysql.GetLikesFromPost(ctx, in.PostId, in.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +166,12 @@ func (r *resource) UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesF
 
 func (r *resource) AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPostRequest) (*pb.AddCommentToPostResponse, error) {
 	commentId := uuid.New().String()
-	comments, err := r.repositories.Mysql.AddCommentToPost(ctx, in.PostId, commentId, in.UserId, in.Content)
+	err := r.repositories.Mysql.AddCommentToPost(ctx, in.PostId, commentId, in.UserId, in.Content)
+	if err != nil {
+		return nil, err
+	}
+
+	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +189,12 @@ func (r *resource) AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPos
 }
 
 func (r *resource) RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error) {
-	comments, err := r.repositories.Mysql.RemoveCommentFromPost(ctx, in.PostId, in.CommentId, in.UserId)
+	err := r.repositories.Mysql.RemoveCommentFromPost(ctx, in.PostId, in.CommentId, in.UserId)
+	if err != nil {
+		return nil, err
+	}
+
+	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId)
 	if err != nil {
 		return nil, err
 	}
@@ -179,6 +209,24 @@ func (r *resource) RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveComm
 	}
 
 	return removeCommentFromPostResponse, nil
+}
+
+func (r *resource) GetAllCommentsFromPost(ctx *context.Context, in *pb.GetAllCommentsFromPostRequest) (*pb.GetAllCommentsFromPostResponse, error) {
+	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId)
+	if err != nil {
+		return nil, err
+	}
+
+	baseModelsComment, err := transformer.GetAllCommentsFromPostToBaseModels(comments)
+	if err != nil {
+		return nil, err
+	}
+
+	getAllCommentsFromPostResponse := &pb.GetAllCommentsFromPostResponse{
+		CommentsFromPost: baseModelsComment,
+	}
+
+	return getAllCommentsFromPostResponse, nil
 }
 
 func NewPostHandler(repositories *repositories.Repositories) IPostHandler {
