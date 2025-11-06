@@ -26,8 +26,8 @@ type IMySqlPost interface {
 	GetLikesFromPost(ctx *context.Context, postId string) (*libModels.PostLikes, error)
 	UpdateLikesFromPost(ctx *context.Context, postId, userId string, liked bool) error
 	GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error)
-	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error
-	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) error
+	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) (*libModels.PostComments, error)
+	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) (*libModels.PostComments, error)
 }
 
 func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error {
@@ -514,7 +514,7 @@ ORDER BY c.createdAt DESC`
 	return result, nil
 }
 
-func (m *mysqlResource) AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error {
+func (m *mysqlResource) AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) (*libModels.PostComments, error) {
 	currentTime := time.Now()
 	var userName string
 
@@ -526,29 +526,45 @@ WHERE u.userId = ?`
 
 	rowUser, err := mysql.DB.QueryContext(*ctx, queryValidateUser, userId)
 	if err != nil {
-		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rowUser.Close()
 	if !rowUser.Next() {
-		return status.Error(codes.NotFound, "user not found")
+		return nil, status.Error(codes.NotFound, "user not found")
 	}
 
 	err = rowUser.Scan(&userName)
 	if err != nil {
-		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
+		return nil, status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 	}
 
 	baseQuery := `INSERT INTO comments (commentId, postId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
 	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, postId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
 	if err != nil {
-		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
-	return nil
+	comments, err := m.GetAllCommentsFromPost(ctx, postId)
+	if err != nil {
+		return nil, err
+	}
+
+	commentsData, err := json.Marshal(comments)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error marshalling comments data: "+err.Error())
+	}
+
+	updateQuery := `UPDATE posts SET comments = ? WHERE postId = ?`
+	_, err = mysql.DB.ExecContext(*ctx, updateQuery, string(commentsData), postId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return comments, nil
 }
 
-func (m *mysqlResource) RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) error {
+func (m *mysqlResource) RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) (*libModels.PostComments, error) {
 	queryValidate := `
 SELECT 
 	c.userId
@@ -558,30 +574,46 @@ WHERE c.commentId = ? AND c.postId = ?`
 	var commentUserId string
 	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, commentId, postId)
 	if err != nil {
-		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rows.Close()
 	if !rows.Next() {
-		return status.Error(codes.NotFound, "comment not found")
+		return nil, status.Error(codes.NotFound, "comment not found")
 	}
 
 	err = rows.Scan(&commentUserId)
 	if err != nil {
-		return status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+		return nil, status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
 	}
 
 	if commentUserId != userId {
-		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+		return nil, status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
 	}
 
 	deleteQuery := `DELETE FROM comments WHERE commentId = ? AND postId = ?`
 	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, commentId, postId)
 	if err != nil {
-		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
-	return nil
+	comments, err := m.GetAllCommentsFromPost(ctx, postId)
+	if err != nil {
+		return nil, err
+	}
+
+	commentsData, err := json.Marshal(comments)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error marshalling comments data: "+err.Error())
+	}
+
+	updateQuery := `UPDATE posts SET comments = ? WHERE postId = ?`
+	_, err = mysql.DB.ExecContext(*ctx, updateQuery, string(commentsData), postId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return comments, nil
 }
 
 func NewMysqlRepository(mysqlClient *mysql.Client) IMySqlPost {
