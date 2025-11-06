@@ -171,7 +171,7 @@ func (r *resource) AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPos
 		return nil, err
 	}
 
-	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId)
+	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId, in.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (r *resource) RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveComm
 		return nil, err
 	}
 
-	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId)
+	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId, in.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (r *resource) RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveComm
 }
 
 func (r *resource) GetAllCommentsFromPost(ctx *context.Context, in *pb.GetAllCommentsFromPostRequest) (*pb.GetAllCommentsFromPostResponse, error) {
-	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId)
+	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, in.PostId, in.UserId)
 	if err != nil {
 		return nil, err
 	}

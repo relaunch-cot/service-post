@@ -24,7 +24,7 @@ type IMySqlPost interface {
 	DeletePost(ctx *context.Context, postId, userId string) error
 	GetLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error)
 	UpdateLikesFromPost(ctx *context.Context, postId, userId string) error
-	GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error)
+	GetAllCommentsFromPost(ctx *context.Context, postId, userId string) (*libModels.PostComments, error)
 	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) error
 	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) error
 }
@@ -297,8 +297,9 @@ SELECT
     l.userName,
 	l.likedAt
 FROM likes l
-WHERE l.postId = ?`
-	rows, err := mysql.DB.QueryContext(*ctx, query, postId)
+WHERE l.postId = ?
+ORDER BY (l.UserId = ?) DESC, l.likedAt DESC`
+	rows, err := mysql.DB.QueryContext(*ctx, query, postId, userId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
@@ -380,7 +381,7 @@ WHERE u.userId = ?`
 	return nil
 }
 
-func (m *mysqlResource) GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error) {
+func (m *mysqlResource) GetAllCommentsFromPost(ctx *context.Context, postId, userId string) (*libModels.PostComments, error) {
 	comments := make([]libModels.Comment, 0)
 
 	query := `
@@ -393,9 +394,9 @@ SELECT
 	IFNULL(c.updatedAt, "") AS updatedAt
 FROM comments c 
 WHERE c.postId = ?
-ORDER BY c.createdAt DESC`
+ORDER BY (c.userId = ?) DESC, c.createdAt DESC`
 
-	rows, err := mysql.DB.QueryContext(*ctx, query, postId)
+	rows, err := mysql.DB.QueryContext(*ctx, query, postId, userId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
