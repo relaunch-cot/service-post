@@ -388,6 +388,22 @@ WHERE p.postId = ?`
 }
 
 func (m *mysqlResource) UpdateLikesFromPost(ctx *context.Context, postId, userId string, liked bool) error {
+	queryStartTransaction := `START TRANSACTION`
+	_, err := mysql.DB.ExecContext(*ctx, queryStartTransaction)
+	if err != nil {
+		return status.Error(codes.Internal, "error starting transaction. Details: "+err.Error())
+	}
+
+	defer func() {
+		if err != nil {
+			queryRollback := `ROLLBACK`
+			_, _ = mysql.DB.ExecContext(*ctx, queryRollback)
+		} else {
+			queryCommit := `COMMIT`
+			_, _ = mysql.DB.ExecContext(*ctx, queryCommit)
+		}
+	}()
+
 	currentTime := time.Now()
 	var userName string
 
@@ -426,6 +442,12 @@ WHERE u.userId = ?`
 
 	if liked {
 		if !isUserAlreadyLiked {
+			queryInsert := `INSERT INTO likes (userId, postId, userName, likedAt) VALUES (?, ?, ?, ?)`
+			_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, postId, userName, currentTime.Format("2006-01-02 15:04:05"))
+			if err != nil {
+				return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+			}
+
 			newLike := libModels.Like{
 				UserId:  userId,
 				LikedAt: currentTime.Format("2006-01-02 15:04:05"),
@@ -438,6 +460,12 @@ WHERE u.userId = ?`
 		}
 	} else {
 		if isUserAlreadyLiked {
+			queryDelete := `DELETE FROM likes WHERE userId = ? AND postId = ?`
+			_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, postId)
+			if err != nil {
+				return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+			}
+
 			updatedLikes := make([]libModels.Like, 0)
 			for _, like := range postLikes.Likes {
 				if like.UserId != userId {
@@ -515,6 +543,22 @@ ORDER BY c.createdAt DESC`
 }
 
 func (m *mysqlResource) AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) (*libModels.PostComments, error) {
+	queryStartTransaction := `START TRANSACTION`
+	_, err := mysql.DB.ExecContext(*ctx, queryStartTransaction)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error starting transaction. Details: "+err.Error())
+	}
+
+	defer func() {
+		if err != nil {
+			queryRollback := `ROLLBACK`
+			_, _ = mysql.DB.ExecContext(*ctx, queryRollback)
+		} else {
+			queryCommit := `COMMIT`
+			_, _ = mysql.DB.ExecContext(*ctx, queryCommit)
+		}
+	}()
+
 	currentTime := time.Now()
 	var userName string
 
@@ -565,6 +609,22 @@ WHERE u.userId = ?`
 }
 
 func (m *mysqlResource) RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) (*libModels.PostComments, error) {
+	queryStartTransaction := `START TRANSACTION`
+	_, err := mysql.DB.ExecContext(*ctx, queryStartTransaction)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error starting transaction. Details: "+err.Error())
+	}
+
+	defer func() {
+		if err != nil {
+			queryRollback := `ROLLBACK`
+			_, _ = mysql.DB.ExecContext(*ctx, queryRollback)
+		} else {
+			queryCommit := `COMMIT`
+			_, _ = mysql.DB.ExecContext(*ctx, queryCommit)
+		}
+	}()
+
 	queryValidate := `
 SELECT 
 	c.userId
