@@ -122,7 +122,7 @@ func (r *resource) DeletePost(ctx *context.Context, in *pb.DeletePostRequest) er
 }
 
 func (r *resource) UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error) {
-	err := r.repositories.Mysql.UpdateLikesFromPost(ctx, in.PostId, in.UserId, in.Liked)
+	err := r.repositories.Mysql.UpdateLikesFromPost(ctx, in.PostId, in.UserId)
 	if err != nil {
 		return nil, err
 	}

@@ -24,7 +24,7 @@ type IMySqlPost interface {
 	UpdatePost(ctx *context.Context, postId, userId, title, content, urlImagePost string) error
 	DeletePost(ctx *context.Context, postId, userId string) error
 	GetLikesFromPost(ctx *context.Context, postId string) (*libModels.PostLikes, error)
-	UpdateLikesFromPost(ctx *context.Context, postId, userId string, liked bool) error
+	UpdateLikesFromPost(ctx *context.Context, postId, userId string) error
 	GetAllCommentsFromPost(ctx *context.Context, postId string) (*libModels.PostComments, error)
 	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content string) (*libModels.PostComments, error)
 	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId string) (*libModels.PostComments, error)
@@ -387,7 +387,7 @@ WHERE p.postId = ?`
 	return postLikes, nil
 }
 
-func (m *mysqlResource) UpdateLikesFromPost(ctx *context.Context, postId, userId string, liked bool) error {
+func (m *mysqlResource) UpdateLikesFromPost(ctx *context.Context, postId, userId string) error {
 	queryStartTransaction := `START TRANSACTION`
 	_, err := mysql.DB.ExecContext(*ctx, queryStartTransaction)
 	if err != nil {
@@ -440,44 +440,36 @@ WHERE u.userId = ?`
 		}
 	}
 
-	if liked {
-		if !isUserAlreadyLiked {
-			queryInsert := `INSERT INTO likes (userId, postId, userName, likedAt) VALUES (?, ?, ?, ?)`
-			_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, postId, userName, currentTime.Format("2006-01-02 15:04:05"))
-			if err != nil {
-				return status.Error(codes.Internal, "error with database. Details: "+err.Error())
-			}
-
-			newLike := libModels.Like{
-				UserId:  userId,
-				LikedAt: currentTime.Format("2006-01-02 15:04:05"),
-			}
-			postLikes.LikesCount += 1
-			newLike.UserName = userName
-			postLikes.Likes = append(postLikes.Likes, newLike)
-		} else {
-			return status.Error(codes.AlreadyExists, "user has already liked this post")
+	if !isUserAlreadyLiked {
+		queryInsert := `INSERT INTO likes (userId, postId, userName, likedAt) VALUES (?, ?, ?, ?)`
+		_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, postId, userName, currentTime.Format("2006-01-02 15:04:05"))
+		if err != nil {
+			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
+
+		newLike := libModels.Like{
+			UserId:  userId,
+			LikedAt: currentTime.Format("2006-01-02 15:04:05"),
+		}
+		postLikes.LikesCount += 1
+		newLike.UserName = userName
+		postLikes.Likes = append(postLikes.Likes, newLike)
 	} else {
-		if isUserAlreadyLiked {
-			queryDelete := `DELETE FROM likes WHERE userId = ? AND postId = ?`
-			_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, postId)
-			if err != nil {
-				return status.Error(codes.Internal, "error with database. Details: "+err.Error())
-			}
-
-			updatedLikes := make([]libModels.Like, 0)
-			for _, like := range postLikes.Likes {
-				if like.UserId != userId {
-					updatedLikes = append(updatedLikes, like)
-					break
-				}
-			}
-			postLikes.LikesCount -= 1
-			postLikes.Likes = updatedLikes
-		} else {
-			return status.Error(codes.NotFound, "user has not liked this post yet")
+		queryDelete := `DELETE FROM likes WHERE userId = ? AND postId = ?`
+		_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, postId)
+		if err != nil {
+			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
+
+		updatedLikes := make([]libModels.Like, 0)
+		for _, like := range postLikes.Likes {
+			if like.UserId != userId {
+				updatedLikes = append(updatedLikes, like)
+				break
+			}
+		}
+		postLikes.LikesCount -= 1
+		postLikes.Likes = updatedLikes
 	}
 
 	likesData, err := json.Marshal(postLikes)
