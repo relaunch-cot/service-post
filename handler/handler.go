@@ -142,7 +142,7 @@ func (r *resource) GetLikesFromPost(ctx *context.Context, in *pb.GetLikesFromPos
 }
 
 func (r *resource) UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error) {
-	err := r.repositories.Mysql.UpdateLikesFromPost(ctx, in.PostId, in.UserId)
+	err := r.repositories.Mysql.UpdateLikesFromPost(ctx, in.PostId, in.UserId, in.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (r *resource) UpdateLikesFromPost(ctx *context.Context, in *pb.UpdateLikesF
 
 func (r *resource) AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPostRequest) (*pb.AddCommentToPostResponse, error) {
 	commentId := uuid.New().String()
-	err := r.repositories.Mysql.AddCommentToPost(ctx, in.PostId, commentId, in.UserId, in.Content)
+	err := r.repositories.Mysql.AddCommentToPost(ctx, in.PostId, commentId, in.UserId, in.Content, in.Type, in.CommentIdForReply)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func (r *resource) AddCommentToPost(ctx *context.Context, in *pb.AddCommentToPos
 }
 
 func (r *resource) RemoveCommentFromPost(ctx *context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error) {
-	err := r.repositories.Mysql.RemoveCommentFromPost(ctx, in.PostId, in.CommentId, in.UserId)
+	err := r.repositories.Mysql.RemoveCommentFromPost(ctx, in.PostId, in.CommentId, in.UserId, in.Type, in.CommentIdForReply)
 	if err != nil {
 		return nil, err
 	}
