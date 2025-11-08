@@ -26,7 +26,7 @@ type IPostHandler interface {
 	GetAllLikesFromPost(ctx *context.Context, in *pb.GetAllLikesFromPostRequest) (*pb.GetAllLikesFromPostResponse, error)
 	UpdateLikesFromPostOrComment(ctx *context.Context, in *pb.UpdateLikesFromPostOrCommentRequest) (*pb.UpdateLikesFromPostOrCommentResponse, error)
 	CreateCommentOrReply(ctx *context.Context, in *pb.CreateCommentOrReplyRequest) (*pb.CreateCommentOrReplyResponse, error)
-	DeleteCommentOrReply(ctx *context.Context, in *pb.DeleteCommentOrReplyRequest) (*pb.DeleteCommentOrReplyResponse, error)
+	DeleteCommentOrReply(ctx *context.Context, in *pb.DeleteCommentOrReplyRequest) error
 	GetAllCommentsFromPost(ctx *context.Context, in *pb.GetAllCommentsFromPostRequest) (*pb.GetAllCommentsFromPostResponse, error)
 }
 
@@ -168,7 +168,7 @@ func (r *resource) UpdateLikesFromPostOrComment(ctx *context.Context, in *pb.Upd
 	}
 
 	updateLikesFromPostOrCommentResponse := &pb.UpdateLikesFromPostOrCommentResponse{
-		LikesFromPost: baseModelsLikesFromPostOrComment,
+		LikesFromPostOrComment: baseModelsLikesFromPostOrComment,
 	}
 
 	return updateLikesFromPostOrCommentResponse, nil
@@ -208,36 +208,21 @@ func (r *resource) CreateCommentOrReply(ctx *context.Context, in *pb.CreateComme
 	return addCommentToPostResponse, nil
 }
 
-func (r *resource) DeleteCommentOrReply(ctx *context.Context, in *pb.DeleteCommentOrReplyRequest) (*pb.DeleteCommentOrReplyResponse, error) {
+func (r *resource) DeleteCommentOrReply(ctx *context.Context, in *pb.DeleteCommentOrReplyRequest) error {
 	var err error
-	var postId *string
 
 	if in.Type == "comment" {
-		postId, err = r.repositories.Mysql.DeleteComment(ctx, in.CommentId, in.UserId)
+		err = r.repositories.Mysql.DeleteComment(ctx, in.CommentId, in.UserId)
 	} else if in.Type == "reply" {
-		postId, err = r.repositories.Mysql.DeleteReply(ctx, in.ReplyId, in.UserId)
+		err = r.repositories.Mysql.DeleteReply(ctx, in.ReplyId, in.UserId)
 	} else {
-		return nil, status.Error(codes.InvalidArgument, "invalid comment type")
+		return status.Error(codes.InvalidArgument, "invalid comment type")
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	comments, err := r.repositories.Mysql.GetAllCommentsFromPost(ctx, *postId, in.UserId)
-	if err != nil {
-		return nil, err
-	}
-
-	baseModelsComment, err := transformer.GetAllCommentsFromPostToBaseModels(comments)
-	if err != nil {
-		return nil, err
-	}
-
-	removeCommentFromPostResponse := &pb.DeleteCommentOrReplyResponse{
-		CommentsFromPost: baseModelsComment,
-	}
-
-	return removeCommentFromPostResponse, nil
+	return nil
 }
 
 func (r *resource) GetAllCommentsFromPost(ctx *context.Context, in *pb.GetAllCommentsFromPostRequest) (*pb.GetAllCommentsFromPostResponse, error) {

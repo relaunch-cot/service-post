@@ -29,8 +29,8 @@ type IMySqlPost interface {
 	GetAllCommentsFromPost(ctx *context.Context, postId, userId string) (*libModels.PostComments, error)
 	CreateComment(ctx *context.Context, postId, commentId, userId, content string) error
 	CreateReply(ctx *context.Context, commentId, replyId, userId, content string) error
-	DeleteComment(ctx *context.Context, commentId, userId string) (*string, error)
-	DeleteReply(ctx *context.Context, replyId, userId string) (*string, error)
+	DeleteComment(ctx *context.Context, commentId, userId string) error
+	DeleteReply(ctx *context.Context, replyId, userId string) error
 }
 
 func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error {
@@ -333,15 +333,22 @@ ORDER BY (l.UserId = ?) DESC, l.likedAt DESC`
 
 func (m *mysqlResource) GetAllLikesFromComment(ctx *context.Context, commentId, userId string) (*libModels.PostLikes, error) {
 	commentLikes := new(libModels.PostLikes)
+	var foreignId string
 
-	query := `
+	err := checkIfCommentIsReply(ctx, commentId)
+	if err != nil {
+		foreignId = "commentId"
+	}
+	foreignId = "replyId"
+
+	query := fmt.Sprintf(`
 SELECT 
     cl.userId,
     cl.userName,
 	cl.likedAt
 FROM comment_likes cl
-WHERE cl.commentId = ?
-ORDER BY (cl.UserId = ?) DESC, cl.likedAt DESC`
+WHERE cl.%s = ?
+ORDER BY (cl.UserId = ?) DESC, cl.likedAt DESC`, foreignId)
 	rows, err := mysql.DB.QueryContext(*ctx, query, commentId, userId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
@@ -372,8 +379,9 @@ ORDER BY (cl.UserId = ?) DESC, cl.likedAt DESC`
 
 func (m *mysqlResource) UpdateLikesFromPostOrComments(ctx *context.Context, postId, commentId, userId, likeType string) error {
 	var table string
-	currentTime := time.Now()
 	var userName string
+	var foreignId string
+	currentTime := time.Now()
 
 	queryValidateUser := `
 SELECT 
@@ -425,6 +433,13 @@ WHERE u.userId = ?`
 				break
 			}
 		}
+
+		err = checkIfCommentIsReply(ctx, commentId)
+		if err != nil {
+			foreignId = "commentId"
+		} else {
+			foreignId = "replyId"
+		}
 	} else {
 		return status.Error(codes.InvalidArgument, "invalid like type")
 	}
@@ -434,7 +449,7 @@ WHERE u.userId = ?`
 			queryInsert := fmt.Sprintf(`INSERT INTO %s (userId, postId, userName, likedAt) VALUES (?, ?, ?, ?)`, table)
 			_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, postId, userName, currentTime.Format("2006-01-02 15:04:05"))
 		} else {
-			queryInsert := fmt.Sprintf(`INSERT INTO %s (userId, commentId, userName, likedAt) VALUES (?, ?, ?, ?)`, table)
+			queryInsert := fmt.Sprintf(`INSERT INTO %s (userId, %s, userName, likedAt) VALUES (?, ?, ?, ?)`, table, foreignId)
 			_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, commentId, userName, currentTime.Format("2006-01-02 15:04:05"))
 		}
 		if err != nil {
@@ -445,7 +460,7 @@ WHERE u.userId = ?`
 			queryDelete := fmt.Sprintf(`DELETE FROM %s WHERE userId = ? AND postId = ?`, table)
 			_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, postId)
 		} else {
-			queryDelete := fmt.Sprintf(`DELETE FROM %s WHERE userId = ? AND commentId = ?`, table)
+			queryDelete := fmt.Sprintf(`DELETE FROM %s WHERE userId = ? AND %s = ?`, table, foreignId)
 			_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, commentId)
 		}
 		if err != nil {
@@ -494,7 +509,7 @@ ORDER BY (c.userId = ?) DESC, c.createdAt DESC`
 			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
 
-		commentLikes, err := getLikesFromComment(ctx, comment.CommentId)
+		commentLikes, err := getLikesFromComment(ctx, comment.CommentId, "commentId")
 		if err != nil {
 			return nil, err
 		}
@@ -599,7 +614,7 @@ WHERE c.commentId = ?`
 
 	defer rowComment.Close()
 	if !rowComment.Next() {
-		err = checkIfCommentIsReply(ctx, commentId, replyId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
+		err = checkIfCommentIsReplyAndInsertNewReplyToReply(ctx, commentId, replyId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
 		if err != nil {
 			return err
 		}
@@ -616,34 +631,32 @@ WHERE c.commentId = ?`
 	return nil
 }
 
-func (m *mysqlResource) DeleteComment(ctx *context.Context, commentId, userId string) (*string, error) {
+func (m *mysqlResource) DeleteComment(ctx *context.Context, commentId, userId string) error {
 	var commentUserId string
-	var postId string
 
 	queryValidate := `
 		SELECT 
-			c.userId,
-			c.postId
+			c.userId
 		FROM comments c 
 		WHERE c.commentId = ?`
 
 	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, commentId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rows.Close()
 	if !rows.Next() {
-		return nil, status.Error(codes.NotFound, "comment not found")
+		return status.Error(codes.NotFound, "comment not found")
 	}
 
-	err = rows.Scan(&commentUserId, &postId)
+	err = rows.Scan(&commentUserId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+		return status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
 	}
 
 	if commentUserId != userId {
-		return nil, status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
 	}
 
 	var deleteQuery string
@@ -652,48 +665,46 @@ func (m *mysqlResource) DeleteComment(ctx *context.Context, commentId, userId st
 	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, commentId)
 
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
-	return &postId, nil
+	return nil
 }
 
-func (m *mysqlResource) DeleteReply(ctx *context.Context, replyId, userId string) (*string, error) {
+func (m *mysqlResource) DeleteReply(ctx *context.Context, replyId, userId string) error {
 	var commentUserId string
-	var postId string
 
 	queryValidate := `
 		SELECT 
-			cr.userId,
-			c.postId
+			cr.userId
 		FROM comment_replies cr 
 			JOIN comments c ON cr.commentId = c.commentId
 		WHERE cr.replyId = ?`
 
 	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, replyId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rows.Close()
 	if !rows.Next() {
 		rows, err = checkInRepliesTable(ctx, replyId)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer rows.Close()
 		if !rows.Next() {
-			return nil, status.Error(codes.NotFound, "reply not found")
+			return status.Error(codes.NotFound, "reply not found")
 		}
 	}
 
-	err = rows.Scan(&commentUserId, &postId)
+	err = rows.Scan(&commentUserId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+		return status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
 	}
 
 	if commentUserId != userId {
-		return nil, status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
 	}
 
 	var deleteQuery string
@@ -702,10 +713,10 @@ func (m *mysqlResource) DeleteReply(ctx *context.Context, replyId, userId string
 	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, replyId)
 
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
-	return &postId, nil
+	return nil
 }
 
 func getCommentReplies(ctx *context.Context, commentId string) (*libModels.PostComments, *int64, error) {
@@ -747,7 +758,7 @@ ORDER BY cr.createdAt DESC`
 			return nil, nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
 
-		likeReplies, err := getLikesFromComment(ctx, reply.CommentId)
+		likeReplies, err := getLikesFromComment(ctx, reply.CommentId, "replyId ")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -779,7 +790,8 @@ ORDER BY cr.createdAt DESC`
 }
 
 func getRepliesFromReply(ctx *context.Context, replyId string) (*libModels.PostComments, *int64, error) {
-	var replyFromRepliesQuantity int64
+	var commentRepliesQuantity int64
+	var replyFromRepliesTotalQuantity int64
 	replies := make([]libModels.Comment, 0)
 
 	query := `
@@ -816,36 +828,48 @@ ORDER BY cr.createdAt DESC`
 			return nil, nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
 
-		likeReplies, err := getLikesFromComment(ctx, reply.CommentId)
+		likeReplies, err := getLikesFromComment(ctx, reply.CommentId, "replyId")
 		if err != nil {
 			return nil, nil, err
 		}
 
+		repliesFromReply, repliesQuantity, err := getRepliesFromReply(ctx, reply.CommentId)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if repliesQuantity == nil {
+			var zero int64 = 0
+			repliesQuantity = &zero
+		}
+		replyFromRepliesTotalQuantity += *repliesQuantity
+
 		reply.Likes = *likeReplies
+		reply.Replies = *repliesFromReply
 
 		replies = append(replies, reply)
 	}
 
-	replyFromRepliesQuantity = int64(len(replies))
+	commentRepliesQuantity = int64(len(replies)) + replyFromRepliesTotalQuantity
 	postReplies := &libModels.PostComments{
 		Comments:      replies,
-		CommentsCount: replyFromRepliesQuantity,
+		CommentsCount: commentRepliesQuantity,
 	}
 
-	return postReplies, &replyFromRepliesQuantity, nil
+	return postReplies, &commentRepliesQuantity, nil
 }
 
-func getLikesFromComment(ctx *context.Context, commentId string) (*libModels.PostLikes, error) {
+func getLikesFromComment(ctx *context.Context, commentId, foreignId string) (*libModels.PostLikes, error) {
 	likes := make([]libModels.Like, 0)
 
-	query := `
+	query := fmt.Sprintf(`
 SELECT 
 	l.userId,
 	l.userName,
 	l.likedAt
 FROM comment_likes l
-WHERE l.commentId = ?
-ORDER BY l.likedAt DESC`
+WHERE l.%s = ?
+ORDER BY l.likedAt DESC`, foreignId)
 	rows, err := mysql.DB.QueryContext(*ctx, query, commentId)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
@@ -875,7 +899,7 @@ ORDER BY l.likedAt DESC`
 	return postLikes, nil
 }
 
-func checkIfCommentIsReply(ctx *context.Context, commentId, replyId, userId, userName, content, currentTime string) error {
+func checkIfCommentIsReply(ctx *context.Context, commentId string) error {
 	queryValidateReply := `
 SELECT 
 	cr.replyId
@@ -892,6 +916,15 @@ WHERE cr.replyId = ?`
 		return status.Error(codes.NotFound, "comment not found")
 	}
 
+	return nil
+}
+
+func checkIfCommentIsReplyAndInsertNewReplyToReply(ctx *context.Context, commentId, replyId, userId, userName, content, currentTime string) error {
+	err := checkIfCommentIsReply(ctx, commentId)
+	if err != nil {
+		return err
+	}
+
 	baseQuery := `INSERT INTO comment_replies (parentReplyId, replyId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
 	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, replyId, userId, userName, content, currentTime)
 	if err != nil {
@@ -904,11 +937,8 @@ WHERE cr.replyId = ?`
 func checkInRepliesTable(ctx *context.Context, replyId string) (*sql.Rows, error) {
 	queryValidate := `
 		SELECT 
-			cr.userId,
-            c.postId
+			cr.userId
 		FROM comment_replies cr 
-			JOIN comment_replies parentCr ON cr.parentReplyId = parentCr.replyId
-            JOIN comments c ON parentCr.commentId = c.commentId
 		WHERE cr.replyId = ?`
 
 	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, replyId)

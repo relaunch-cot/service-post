@@ -92,13 +92,13 @@ func (r *postResource) CreateCommentOrReply(ctx context.Context, in *pb.CreateCo
 	return response, nil
 }
 
-func (r *postResource) DeleteCommentOrReply(ctx context.Context, in *pb.DeleteCommentOrReplyRequest) (*pb.DeleteCommentOrReplyResponse, error) {
-	response, err := r.handler.Post.DeleteCommentOrReply(&ctx, in)
+func (r *postResource) DeleteCommentOrReply(ctx context.Context, in *pb.DeleteCommentOrReplyRequest) (*empty.Empty, error) {
+	err := r.handler.Post.DeleteCommentOrReply(&ctx, in)
 	if err != nil {
 		return nil, err
 	}
 
-	return response, nil
+	return &empty.Empty{}, nil
 }
 
 func (r *postResource) GetAllCommentsFromPost(ctx context.Context, in *pb.GetAllCommentsFromPostRequest) (*pb.GetAllCommentsFromPostResponse, error) {
