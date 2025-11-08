@@ -145,16 +145,18 @@ func (r *resource) GetAllLikesFromPost(ctx *context.Context, in *pb.GetAllLikesF
 }
 
 func (r *resource) UpdateLikesFromPostOrComment(ctx *context.Context, in *pb.UpdateLikesFromPostOrCommentRequest) (*pb.UpdateLikesFromPostOrCommentResponse, error) {
-	err := r.repositories.Mysql.UpdateLikesFromPostOrComments(ctx, in.PostId, in.UserId, in.Type)
+	err := r.repositories.Mysql.UpdateLikesFromPostOrComments(ctx, in.PostId, in.CommentId, in.UserId, in.Type)
 	if err != nil {
 		return nil, err
 	}
 
 	likesFromPostOrComment := new(libModels.PostLikes)
-	if in.Type == "post" {
+	if in.Type == "likeToPost" {
 		likesFromPostOrComment, err = r.repositories.Mysql.GetAllLikesFromPost(ctx, in.PostId, in.UserId)
-	} else if in.Type == "comment" {
+	} else if in.Type == "likeToComment" {
 		likesFromPostOrComment, err = r.repositories.Mysql.GetAllLikesFromComment(ctx, in.CommentId, in.UserId)
+	} else {
+		return nil, status.Error(codes.InvalidArgument, "invalid like type")
 	}
 	if err != nil {
 		return nil, err

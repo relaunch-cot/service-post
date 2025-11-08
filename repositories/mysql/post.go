@@ -24,7 +24,7 @@ type IMySqlPost interface {
 	DeletePost(ctx *context.Context, postId, userId string) error
 	GetAllLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error)
 	GetAllLikesFromComment(ctx *context.Context, commentId, userId string) (*libModels.PostLikes, error)
-	UpdateLikesFromPostOrComments(ctx *context.Context, postId, userId, likeType string) error
+	UpdateLikesFromPostOrComments(ctx *context.Context, postId, commentId, userId, likeType string) error
 	GetAllCommentsFromPost(ctx *context.Context, postId, userId string) (*libModels.PostComments, error)
 	CreateComment(ctx *context.Context, postId, commentId, userId, content string) error
 	CreateReply(ctx *context.Context, commentId, replyId, userId, content string) error
@@ -339,7 +339,7 @@ SELECT
     cl.userName,
 	cl.likedAt
 FROM comment_likes cl
-WHERE cl.comment = ?
+WHERE cl.commentId = ?
 ORDER BY (cl.UserId = ?) DESC, cl.likedAt DESC`
 	rows, err := mysql.DB.QueryContext(*ctx, query, commentId, userId)
 	if err != nil {
@@ -369,7 +369,7 @@ ORDER BY (cl.UserId = ?) DESC, cl.likedAt DESC`
 	return commentLikes, nil
 }
 
-func (m *mysqlResource) UpdateLikesFromPostOrComments(ctx *context.Context, postId, userId, likeType string) error {
+func (m *mysqlResource) UpdateLikesFromPostOrComments(ctx *context.Context, postId, commentId, userId, likeType string) error {
 	var table string
 	currentTime := time.Now()
 	var userName string
@@ -397,6 +397,7 @@ WHERE u.userId = ?`
 	var isUserAlreadyLiked bool
 
 	if likeType == "likeToPost" {
+		table = "likes"
 		postLikes, err := m.GetAllLikesFromPost(ctx, postId, userId)
 		if err != nil {
 			return err
@@ -410,7 +411,8 @@ WHERE u.userId = ?`
 			}
 		}
 	} else if likeType == "likeToComment" {
-		commentLikes, err := m.GetAllLikesFromComment(ctx, postId, userId)
+		table = "comment_likes"
+		commentLikes, err := m.GetAllLikesFromComment(ctx, commentId, userId)
 		if err != nil {
 			return err
 		}
@@ -427,14 +429,24 @@ WHERE u.userId = ?`
 	}
 
 	if !isUserAlreadyLiked {
-		queryInsert := fmt.Sprintf(`INSERT INTO %s (userId, postId, userName, likedAt) VALUES (?, ?, ?, ?)`, table)
-		_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, postId, userName, currentTime.Format("2006-01-02 15:04:05"))
+		if likeType == "likeToPost" {
+			queryInsert := fmt.Sprintf(`INSERT INTO %s (userId, postId, userName, likedAt) VALUES (?, ?, ?, ?)`, table)
+			_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, postId, userName, currentTime.Format("2006-01-02 15:04:05"))
+		} else {
+			queryInsert := fmt.Sprintf(`INSERT INTO %s (userId, commentId, userName, likedAt) VALUES (?, ?, ?, ?)`, table)
+			_, err = mysql.DB.ExecContext(*ctx, queryInsert, userId, commentId, userName, currentTime.Format("2006-01-02 15:04:05"))
+		}
 		if err != nil {
 			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
 	} else {
-		queryDelete := fmt.Sprintf(`DELETE FROM %s WHERE userId = ? AND postId = ?`, table)
-		_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, postId)
+		if likeType == "likeToPost" {
+			queryDelete := fmt.Sprintf(`DELETE FROM %s WHERE userId = ? AND postId = ?`, table)
+			_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, postId)
+		} else {
+			queryDelete := fmt.Sprintf(`DELETE FROM %s WHERE userId = ? AND commentId = ?`, table)
+			_, err = mysql.DB.ExecContext(*ctx, queryDelete, userId, commentId)
+		}
 		if err != nil {
 			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
