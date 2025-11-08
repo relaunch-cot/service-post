@@ -458,6 +458,7 @@ WHERE u.userId = ?`
 
 func (m *mysqlResource) GetAllCommentsFromPost(ctx *context.Context, postId, userId string) (*libModels.PostComments, error) {
 	comments := make([]libModels.Comment, 0)
+	var repliesQuantity int64
 
 	query := `
 SELECT 
@@ -498,10 +499,16 @@ ORDER BY (c.userId = ?) DESC, c.createdAt DESC`
 			return nil, err
 		}
 
-		commentReplies, err := getCommentReplies(ctx, comment.CommentId)
+		commentReplies, repliesFromCommentQuantity, err := getCommentReplies(ctx, comment.CommentId)
 		if err != nil {
 			return nil, err
 		}
+
+		if repliesFromCommentQuantity == nil {
+			var zero int64 = 0
+			repliesFromCommentQuantity = &zero
+		}
+		repliesQuantity += *repliesFromCommentQuantity
 
 		comment.Likes = *commentLikes
 		comment.Replies = *commentReplies
@@ -509,9 +516,11 @@ ORDER BY (c.userId = ?) DESC, c.createdAt DESC`
 		comments = append(comments, comment)
 	}
 
+	commentsQuantity := int64(len(comments))
+	commentsQuantity += repliesQuantity
 	result := &libModels.PostComments{
 		Comments:      comments,
-		CommentsCount: int64(len(comments)),
+		CommentsCount: commentsQuantity,
 	}
 
 	return result, nil
@@ -699,7 +708,9 @@ func (m *mysqlResource) DeleteReply(ctx *context.Context, replyId, userId string
 	return &postId, nil
 }
 
-func getCommentReplies(ctx *context.Context, commentId string) (*libModels.PostComments, error) {
+func getCommentReplies(ctx *context.Context, commentId string) (*libModels.PostComments, *int64, error) {
+	var commentRepliesQuantity int64
+	var replyFromRepliesTotalQuantity int64
 	replies := make([]libModels.Comment, 0)
 
 	query := `
@@ -716,7 +727,7 @@ ORDER BY cr.createdAt DESC`
 
 	rows, err := mysql.DB.QueryContext(*ctx, query, commentId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return nil, nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rows.Close()
@@ -733,18 +744,24 @@ ORDER BY cr.createdAt DESC`
 		)
 
 		if err != nil {
-			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+			return nil, nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
 
 		likeReplies, err := getLikesFromComment(ctx, reply.CommentId)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		commentReplies, err := getRepliesFromReply(ctx, reply.CommentId)
+		commentReplies, repliesQuantity, err := getRepliesFromReply(ctx, reply.CommentId)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+
+		if repliesQuantity == nil {
+			var zero int64 = 0
+			repliesQuantity = &zero
+		}
+		replyFromRepliesTotalQuantity += *repliesQuantity
 
 		reply.Replies = *commentReplies
 		reply.Likes = *likeReplies
@@ -752,15 +769,17 @@ ORDER BY cr.createdAt DESC`
 		replies = append(replies, reply)
 	}
 
+	commentRepliesQuantity = int64(len(replies)) + replyFromRepliesTotalQuantity
 	postReplies := &libModels.PostComments{
 		Comments:      replies,
-		CommentsCount: int64(len(replies)),
+		CommentsCount: commentRepliesQuantity,
 	}
 
-	return postReplies, nil
+	return postReplies, &commentRepliesQuantity, nil
 }
 
-func getRepliesFromReply(ctx *context.Context, replyId string) (*libModels.PostComments, error) {
+func getRepliesFromReply(ctx *context.Context, replyId string) (*libModels.PostComments, *int64, error) {
+	var replyFromRepliesQuantity int64
 	replies := make([]libModels.Comment, 0)
 
 	query := `
@@ -777,7 +796,7 @@ ORDER BY cr.createdAt DESC`
 
 	rows, err := mysql.DB.QueryContext(*ctx, query, replyId)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		return nil, nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	defer rows.Close()
@@ -794,31 +813,26 @@ ORDER BY cr.createdAt DESC`
 		)
 
 		if err != nil {
-			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+			return nil, nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
 
 		likeReplies, err := getLikesFromComment(ctx, reply.CommentId)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
-		commentReplies, err := getCommentReplies(ctx, reply.CommentId)
-		if err != nil {
-			return nil, err
-		}
-
-		reply.Replies = *commentReplies
 		reply.Likes = *likeReplies
 
 		replies = append(replies, reply)
 	}
 
+	replyFromRepliesQuantity = int64(len(replies))
 	postReplies := &libModels.PostComments{
 		Comments:      replies,
-		CommentsCount: int64(len(replies)),
+		CommentsCount: replyFromRepliesQuantity,
 	}
 
-	return postReplies, nil
+	return postReplies, &replyFromRepliesQuantity, nil
 }
 
 func getLikesFromComment(ctx *context.Context, commentId string) (*libModels.PostLikes, error) {
