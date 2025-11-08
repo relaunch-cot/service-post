@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -576,6 +577,26 @@ WHERE u.userId = ?`
 		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 	}
 
+	queryValidateComment := `
+SELECT 
+	c.commentId
+FROM comments c 
+WHERE c.commentId = ?`
+
+	rowComment, err := mysql.DB.QueryContext(*ctx, queryValidateComment, commentId)
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rowComment.Close()
+	if !rowComment.Next() {
+		err = checkIfCommentIsReply(ctx, commentId, replyId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
 	baseQuery := `INSERT INTO comment_replies (commentId, replyId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
 	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, replyId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
 
@@ -647,7 +668,14 @@ func (m *mysqlResource) DeleteReply(ctx *context.Context, replyId, userId string
 
 	defer rows.Close()
 	if !rows.Next() {
-		return nil, status.Error(codes.NotFound, "reply not found")
+		rows, err = checkInRepliesTable(ctx, replyId)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		if !rows.Next() {
+			return nil, status.Error(codes.NotFound, "reply not found")
+		}
 	}
 
 	err = rows.Scan(&commentUserId, &postId)
@@ -708,6 +736,80 @@ ORDER BY cr.createdAt DESC`
 			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 		}
 
+		likeReplies, err := getLikesFromComment(ctx, reply.CommentId)
+		if err != nil {
+			return nil, err
+		}
+
+		commentReplies, err := getRepliesFromReply(ctx, reply.CommentId)
+		if err != nil {
+			return nil, err
+		}
+
+		reply.Replies = *commentReplies
+		reply.Likes = *likeReplies
+
+		replies = append(replies, reply)
+	}
+
+	postReplies := &libModels.PostComments{
+		Comments:      replies,
+		CommentsCount: int64(len(replies)),
+	}
+
+	return postReplies, nil
+}
+
+func getRepliesFromReply(ctx *context.Context, replyId string) (*libModels.PostComments, error) {
+	replies := make([]libModels.Comment, 0)
+
+	query := `
+SELECT 
+	cr.replyId,
+	cr.userId,
+	cr.userName,
+	cr.content,
+	cr.createdAt,
+	IFNULL(cr.updatedAt, "") AS updatedAt
+FROM comment_replies cr 
+WHERE cr.parentReplyId = ?
+ORDER BY cr.createdAt DESC`
+
+	rows, err := mysql.DB.QueryContext(*ctx, query, replyId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var reply libModels.Comment
+		err = rows.Scan(
+			&reply.CommentId,
+			&reply.UserId,
+			&reply.UserName,
+			&reply.Content,
+			&reply.CreatedAt,
+			&reply.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+		}
+
+		likeReplies, err := getLikesFromComment(ctx, reply.CommentId)
+		if err != nil {
+			return nil, err
+		}
+
+		commentReplies, err := getCommentReplies(ctx, reply.CommentId)
+		if err != nil {
+			return nil, err
+		}
+
+		reply.Replies = *commentReplies
+		reply.Likes = *likeReplies
+
 		replies = append(replies, reply)
 	}
 
@@ -759,6 +861,49 @@ ORDER BY l.likedAt DESC`
 	return postLikes, nil
 }
 
+func checkIfCommentIsReply(ctx *context.Context, commentId, replyId, userId, userName, content, currentTime string) error {
+	queryValidateReply := `
+SELECT 
+	cr.replyId
+FROM comment_replies cr
+WHERE cr.replyId = ?`
+
+	rowReply, err := mysql.DB.QueryContext(*ctx, queryValidateReply, commentId)
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rowReply.Close()
+	if !rowReply.Next() {
+		return status.Error(codes.NotFound, "comment not found")
+	}
+
+	baseQuery := `INSERT INTO comment_replies (parentReplyId, replyId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, replyId, userId, userName, content, currentTime)
+	if err != nil {
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return nil
+}
+
+func checkInRepliesTable(ctx *context.Context, replyId string) (*sql.Rows, error) {
+	queryValidate := `
+		SELECT 
+			cr.userId,
+            c.postId
+		FROM comment_replies cr 
+			JOIN comment_replies parentCr ON cr.parentReplyId = parentCr.replyId
+            JOIN comments c ON parentCr.commentId = c.commentId
+		WHERE cr.replyId = ?`
+
+	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, replyId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return rows, nil
+}
 func NewMysqlRepository(mysqlClient *mysql.Client) IMySqlPost {
 	return &mysqlResource{
 		mysqlClient: mysqlClient,
