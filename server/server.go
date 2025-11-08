@@ -65,8 +65,8 @@ func (r *postResource) DeletePost(ctx context.Context, in *pb.DeletePostRequest)
 	return &empty.Empty{}, nil
 }
 
-func (r *postResource) GetLikesFromPost(ctx context.Context, in *pb.GetLikesFromPostRequest) (*pb.GetLikesFromPostResponse, error) {
-	response, err := r.handler.Post.GetLikesFromPost(&ctx, in)
+func (r *postResource) GetAllLikesFromPost(ctx context.Context, in *pb.GetAllLikesFromPostRequest) (*pb.GetAllLikesFromPostResponse, error) {
+	response, err := r.handler.Post.GetAllLikesFromPost(&ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +74,8 @@ func (r *postResource) GetLikesFromPost(ctx context.Context, in *pb.GetLikesFrom
 	return response, nil
 }
 
-func (r *postResource) UpdateLikesFromPost(ctx context.Context, in *pb.UpdateLikesFromPostRequest) (*pb.UpdateLikesFromPostResponse, error) {
-	response, err := r.handler.Post.UpdateLikesFromPost(&ctx, in)
+func (r *postResource) UpdateLikesFromPostOrComment(ctx context.Context, in *pb.UpdateLikesFromPostOrCommentRequest) (*pb.UpdateLikesFromPostOrCommentResponse, error) {
+	response, err := r.handler.Post.UpdateLikesFromPostOrComment(&ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +83,8 @@ func (r *postResource) UpdateLikesFromPost(ctx context.Context, in *pb.UpdateLik
 	return response, nil
 }
 
-func (r *postResource) AddCommentToPost(ctx context.Context, in *pb.AddCommentToPostRequest) (*pb.AddCommentToPostResponse, error) {
-	response, err := r.handler.Post.AddCommentToPost(&ctx, in)
+func (r *postResource) CreateCommentOrReply(ctx context.Context, in *pb.CreateCommentOrReplyRequest) (*pb.CreateCommentOrReplyResponse, error) {
+	response, err := r.handler.Post.CreateCommentOrReply(&ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +92,8 @@ func (r *postResource) AddCommentToPost(ctx context.Context, in *pb.AddCommentTo
 	return response, nil
 }
 
-func (r *postResource) RemoveCommentFromPost(ctx context.Context, in *pb.RemoveCommentFromPostRequest) (*pb.RemoveCommentFromPostResponse, error) {
-	response, err := r.handler.Post.RemoveCommentFromPost(&ctx, in)
+func (r *postResource) DeleteCommentOrReply(ctx context.Context, in *pb.DeleteCommentOrReplyRequest) (*pb.DeleteCommentOrReplyResponse, error) {
+	response, err := r.handler.Post.DeleteCommentOrReply(&ctx, in)
 	if err != nil {
 		return nil, err
 	}

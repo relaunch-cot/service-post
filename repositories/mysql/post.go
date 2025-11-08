@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -23,11 +22,14 @@ type IMySqlPost interface {
 	GetAllPostsFromUser(ctx *context.Context, userId string) ([]*libModels.Post, error)
 	UpdatePost(ctx *context.Context, postId, userId, title, content, urlImagePost string) error
 	DeletePost(ctx *context.Context, postId, userId string) error
-	GetLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error)
-	UpdateLikesFromPost(ctx *context.Context, postId, userId, likeType string) error
+	GetAllLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error)
+	GetAllLikesFromComment(ctx *context.Context, commentId, userId string) (*libModels.PostLikes, error)
+	UpdateLikesFromPostOrComments(ctx *context.Context, postId, userId, likeType string) error
 	GetAllCommentsFromPost(ctx *context.Context, postId, userId string) (*libModels.PostComments, error)
-	AddCommentToPost(ctx *context.Context, postId, commentId, userId, content, commentType, commentIdForReply string) error
-	RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId, commentType, commentIdForReply string) error
+	CreateComment(ctx *context.Context, postId, commentId, userId, content string) error
+	CreateReply(ctx *context.Context, commentId, replyId, userId, content string) error
+	DeleteComment(ctx *context.Context, commentId, userId string) (*string, error)
+	DeleteReply(ctx *context.Context, replyId, userId string) (*string, error)
 }
 
 func (m *mysqlResource) CreatePost(ctx *context.Context, userId, postId, title, content, postType, urlImagePost string) error {
@@ -289,8 +291,7 @@ WHERE p.postId = ?`
 	return nil
 }
 
-// TODO: corrigir para manter o padrão de likes e comments
-func (m *mysqlResource) GetLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error) {
+func (m *mysqlResource) GetAllLikesFromPost(ctx *context.Context, postId, userId string) (*libModels.PostLikes, error) {
 	postLikes := new(libModels.PostLikes)
 
 	query := `
@@ -329,17 +330,47 @@ ORDER BY (l.UserId = ?) DESC, l.likedAt DESC`
 	return postLikes, nil
 }
 
-// TODO: corrigir para manter o padrão de likes e comments
-func (m *mysqlResource) UpdateLikesFromPost(ctx *context.Context, postId, userId, likeType string) error {
-	var table string
-	if likeType == "likeToPost" {
-		table = "likes"
-	} else if likeType == "likeToComment" {
-		table = "comment_likes"
-	} else {
-		return status.Error(codes.InvalidArgument, "invalid like type")
+func (m *mysqlResource) GetAllLikesFromComment(ctx *context.Context, commentId, userId string) (*libModels.PostLikes, error) {
+	commentLikes := new(libModels.PostLikes)
+
+	query := `
+SELECT 
+    cl.userId,
+    cl.userName,
+	cl.likedAt
+FROM comment_likes cl
+WHERE cl.comment = ?
+ORDER BY (cl.UserId = ?) DESC, cl.likedAt DESC`
+	rows, err := mysql.DB.QueryContext(*ctx, query, commentId, userId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
+	defer rows.Close()
+
+	var likes []libModels.Like
+	for rows.Next() {
+		var like libModels.Like
+		err = rows.Scan(
+			&like.UserId,
+			&like.UserName,
+			&like.LikedAt,
+		)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
+		}
+
+		likes = append(likes, like)
+	}
+
+	commentLikes.Likes = likes
+	commentLikes.LikesCount = int64(len(likes))
+
+	return commentLikes, nil
+}
+
+func (m *mysqlResource) UpdateLikesFromPostOrComments(ctx *context.Context, postId, userId, likeType string) error {
+	var table string
 	currentTime := time.Now()
 	var userName string
 
@@ -363,17 +394,36 @@ WHERE u.userId = ?`
 		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 	}
 
-	postLikes, err := m.GetLikesFromPost(ctx, postId, userId)
-	if err != nil {
-		return err
-	}
+	var isUserAlreadyLiked bool
 
-	isUserAlreadyLiked := false
-	for _, like := range postLikes.Likes {
-		if like.UserId == userId {
-			isUserAlreadyLiked = true
-			break
+	if likeType == "likeToPost" {
+		postLikes, err := m.GetAllLikesFromPost(ctx, postId, userId)
+		if err != nil {
+			return err
 		}
+
+		isUserAlreadyLiked = false
+		for _, like := range postLikes.Likes {
+			if like.UserId == userId {
+				isUserAlreadyLiked = true
+				break
+			}
+		}
+	} else if likeType == "likeToComment" {
+		commentLikes, err := m.GetAllLikesFromComment(ctx, postId, userId)
+		if err != nil {
+			return err
+		}
+
+		isUserAlreadyLiked = false
+		for _, like := range commentLikes.Likes {
+			if like.UserId == userId {
+				isUserAlreadyLiked = true
+				break
+			}
+		}
+	} else {
+		return status.Error(codes.InvalidArgument, "invalid like type")
 	}
 
 	if !isUserAlreadyLiked {
@@ -454,20 +504,9 @@ ORDER BY (c.userId = ?) DESC, c.createdAt DESC`
 	return result, nil
 }
 
-func (m *mysqlResource) AddCommentToPost(ctx *context.Context, postId, commentId, userId, content, commentType, commentIdForReply string) error {
+func (m *mysqlResource) CreateComment(ctx *context.Context, postId, commentId, userId, content string) error {
 	currentTime := time.Now()
 	var userName string
-	var table string
-	var replyId string
-
-	if commentType == "comment" {
-		table = "comments"
-	} else if commentType == "replyToComment" {
-		table = "comment_replies"
-		replyId = commentId
-	} else {
-		return status.Error(codes.InvalidArgument, "invalid comment type")
-	}
 
 	queryValidateUser := `
 SELECT 
@@ -490,17 +529,8 @@ WHERE u.userId = ?`
 		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 	}
 
-	var baseQuery string
-	switch table {
-	case "comments":
-		baseQuery = `INSERT INTO comments (commentId, postId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
-		_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, postId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
-		break
-	case "comment_replies":
-		baseQuery = `INSERT INTO comment_replies (replyId, commentId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
-		_, err = mysql.DB.ExecContext(*ctx, baseQuery, replyId, commentIdForReply, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
-		break
-	}
+	baseQuery := `INSERT INTO comments (commentId, postId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, postId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
 
 	if err != nil {
 		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
@@ -509,87 +539,124 @@ WHERE u.userId = ?`
 	return nil
 }
 
-func (m *mysqlResource) RemoveCommentFromPost(ctx *context.Context, postId, commentId, userId, commentType, commentIdForReply string) error {
-	var table string
-	var replyId string
+func (m *mysqlResource) CreateReply(ctx *context.Context, commentId, replyId, userId, content string) error {
+	currentTime := time.Now()
+	var userName string
 
-	var commentUserId string
-	var err error
-	rows := new(sql.Rows)
+	queryValidateUser := `
+SELECT 
+	u.name
+FROM users u 
+WHERE u.userId = ?`
 
-	switch commentType {
-	case "comment":
-		table = "comments"
-
-		queryValidate := `
-		SELECT 
-			c.userId
-		FROM comments c 
-		WHERE c.commentId = ? AND c.postId = ?`
-
-		rows, err = mysql.DB.QueryContext(*ctx, queryValidate, commentId, postId)
-		if err != nil {
-			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
-		}
-
-		defer rows.Close()
-		if !rows.Next() {
-			return status.Error(codes.NotFound, "comment not found")
-		}
-		break
-	case "replyToComment":
-		replyId = commentId
-		table = "comment_replies"
-
-		queryValidate := `
-		SELECT 
-			cr.userId
-		FROM comment_replies cr 
-		WHERE cr.replyId = ? AND cr.commentId = ?`
-
-		rows, err = mysql.DB.QueryContext(*ctx, queryValidate, replyId, commentIdForReply)
-		if err != nil {
-			return status.Error(codes.Internal, "error with database. Details: "+err.Error())
-		}
-
-		defer rows.Close()
-		if !rows.Next() {
-			return status.Error(codes.NotFound, "comment reply not found")
-		}
-		break
-	default:
-		return status.Error(codes.InvalidArgument, "invalid comment type")
-	}
-
-	err = rows.Scan(&commentUserId)
+	rowUser, err := mysql.DB.QueryContext(*ctx, queryValidateUser, userId)
 	if err != nil {
-		return status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
-	if commentUserId != userId {
-		return status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+	defer rowUser.Close()
+	if !rowUser.Next() {
+		return status.Error(codes.NotFound, "user not found")
 	}
 
-	var deleteQuery string
-
-	switch table {
-	case "comments":
-		deleteQuery = `DELETE FROM comments WHERE commentId = ? AND postId = ?`
-		_, err = mysql.DB.ExecContext(*ctx, deleteQuery, commentId, postId)
-		break
-	case "comment_replies":
-		deleteQuery = `DELETE FROM comment_replies WHERE replyId = ? AND commentId = ?`
-		_, err = mysql.DB.ExecContext(*ctx, deleteQuery, replyId, commentIdForReply)
-		break
-	default:
-		return status.Error(codes.Internal, "invalid table name")
+	err = rowUser.Scan(&userName)
+	if err != nil {
+		return status.Error(codes.Internal, "error scanning mysql row: "+err.Error())
 	}
+
+	baseQuery := `INSERT INTO comment_replies (commentId, replyId, userId, userName, content, createdAt) VALUES (?, ?, ?, ?, ?, ?)`
+	_, err = mysql.DB.ExecContext(*ctx, baseQuery, commentId, replyId, userId, userName, content, currentTime.Format("2006-01-02 15:04:05"))
 
 	if err != nil {
 		return status.Error(codes.Internal, "error with database. Details: "+err.Error())
 	}
 
 	return nil
+}
+
+func (m *mysqlResource) DeleteComment(ctx *context.Context, commentId, userId string) (*string, error) {
+	var commentUserId string
+	var postId string
+
+	queryValidate := `
+		SELECT 
+			c.userId,
+			c.postId
+		FROM comments c 
+		WHERE c.commentId = ?`
+
+	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, commentId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, status.Error(codes.NotFound, "comment not found")
+	}
+
+	err = rows.Scan(&commentUserId, &postId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+	}
+
+	if commentUserId != userId {
+		return nil, status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+	}
+
+	var deleteQuery string
+
+	deleteQuery = `DELETE FROM comments WHERE commentId = ?`
+	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, commentId)
+
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return &postId, nil
+}
+
+func (m *mysqlResource) DeleteReply(ctx *context.Context, replyId, userId string) (*string, error) {
+	var commentUserId string
+	var postId string
+
+	queryValidate := `
+		SELECT 
+			cr.userId,
+			c.postId
+		FROM comment_replies cr 
+			JOIN comments c ON cr.commentId = c.commentId
+		WHERE cr.replyId = ?`
+
+	rows, err := mysql.DB.QueryContext(*ctx, queryValidate, replyId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, status.Error(codes.NotFound, "reply not found")
+	}
+
+	err = rows.Scan(&commentUserId, &postId)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error scanning mysql rows. Details: "+err.Error())
+	}
+
+	if commentUserId != userId {
+		return nil, status.Error(codes.PermissionDenied, "user is not authorized to perform this action")
+	}
+
+	var deleteQuery string
+
+	deleteQuery = `DELETE FROM comment_replies WHERE replyId = ?`
+	_, err = mysql.DB.ExecContext(*ctx, deleteQuery, replyId)
+
+	if err != nil {
+		return nil, status.Error(codes.Internal, "error with database. Details: "+err.Error())
+	}
+
+	return &postId, nil
 }
 
 func getCommentReplies(ctx *context.Context, commentId string) (*libModels.PostComments, error) {

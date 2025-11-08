@@ -48,7 +48,7 @@ func GetAllPostsFromUserToBaseModels(posts []*libModels.Post) ([]*pbBaseModels.P
 	return pbPosts, nil
 }
 
-func GetLikesFromPostToBaseModels(postLikes *libModels.PostLikes) (*pbBaseModels.PostLikes, error) {
+func GetAllLikesFromPostOrCommentToBaseModels(postLikes *libModels.PostLikes) (*pbBaseModels.PostLikes, error) {
 	var pbPostLikes *pbBaseModels.PostLikes
 	b, err := json.Marshal(postLikes)
 	if err != nil {
