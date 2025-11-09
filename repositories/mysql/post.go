@@ -338,8 +338,9 @@ func (m *mysqlResource) GetAllLikesFromComment(ctx *context.Context, commentId, 
 	err := checkIfCommentIsReply(ctx, commentId)
 	if err != nil {
 		foreignId = "commentId"
+	} else {
+		foreignId = "replyId"
 	}
-	foreignId = "replyId"
 
 	query := fmt.Sprintf(`
 SELECT 
