@@ -5,7 +5,7 @@ go 1.24.9
 require (
 	github.com/golang/protobuf v1.5.4
 	github.com/google/uuid v1.6.0
-	github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251108231713-8a0b2bf2f067
+	github.com/relaunch-cot/lib-relaunch-cot v0.0.0-20251126213741-09c81cfacf31
 	google.golang.org/grpc v1.76.0
 )
 

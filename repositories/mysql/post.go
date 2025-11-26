@@ -106,7 +106,8 @@ SELECT
 	p.type,
 	IFNULL(p.urlImagePost, "") AS urlImagePost,
 	p.createdAt, 
-	IFNULL(p.updatedAt, "") AS updatedAt
+	IFNULL(p.updatedAt, "") AS updatedAt,
+	IFNULL(u.urlImageUser, "") AS urlImageUser
 FROM posts p 
 	JOIN users u ON p.authorId = u.userId
 ORDER BY p.createdAt DESC`
@@ -132,6 +133,7 @@ ORDER BY p.createdAt DESC`
 			&p.UrlImagePost,
 			&p.CreatedAt,
 			&p.UpdatedAt,
+			&p.UserUrlImage,
 		)
 
 		if err != nil {
@@ -156,7 +158,8 @@ SELECT
 	p.type,
 	IFNULL(p.urlImagePost, "") AS urlImagePost,
 	p.createdAt, 
-	IFNULL(p.updatedAt, "") AS updatedAt
+	IFNULL(p.updatedAt, "") AS updatedAt,
+	IFNULL(u.urlImageUser, "") AS urlImageUser
 FROM posts p 
 	JOIN users u ON p.authorId = u.userId
 WHERE p.authorId = ?
@@ -182,6 +185,7 @@ ORDER BY p.createdAt DESC`
 			&p.UrlImagePost,
 			&p.CreatedAt,
 			&p.UpdatedAt,
+			&p.UserUrlImage,
 		)
 
 		if err != nil {
@@ -483,8 +487,10 @@ SELECT
 	c.userName,
 	c.content,
 	c.createdAt,
-	IFNULL(c.updatedAt, "") AS updatedAt
+	IFNULL(c.updatedAt, "") AS updatedAt,
+	IFNULL(u.urlImageUser, "") AS urlImageUser
 FROM comments c 
+	JOIN users u ON c.userId = u.userId
 WHERE c.postId = ?
 ORDER BY (c.userId = ?) DESC, c.createdAt DESC`
 
@@ -504,6 +510,7 @@ ORDER BY (c.userId = ?) DESC, c.createdAt DESC`
 			&comment.Content,
 			&comment.CreatedAt,
 			&comment.UpdatedAt,
+			&comment.UserUrlImage,
 		)
 
 		if err != nil {
@@ -732,8 +739,10 @@ SELECT
 	cr.userName,
 	cr.content,
 	cr.createdAt,
-	IFNULL(cr.updatedAt, "") AS updatedAt
+	IFNULL(cr.updatedAt, "") AS updatedAt,
+	IFNULL(u.urlImageUser, "") AS urlImageUser
 FROM comment_replies cr 
+	JOIN users u ON cr.userId = u.userId
 WHERE cr.commentId = ?
 ORDER BY cr.createdAt DESC`
 
@@ -753,6 +762,7 @@ ORDER BY cr.createdAt DESC`
 			&reply.Content,
 			&reply.CreatedAt,
 			&reply.UpdatedAt,
+			&reply.UserUrlImage,
 		)
 
 		if err != nil {
@@ -802,8 +812,10 @@ SELECT
 	cr.userName,
 	cr.content,
 	cr.createdAt,
-	IFNULL(cr.updatedAt, "") AS updatedAt
+	IFNULL(cr.updatedAt, "") AS updatedAt,
+	IFNULL(u.urlImageUser, "") AS urlImageUser
 FROM comment_replies cr 
+	JOIN users u ON cr.userId = u.userId
 WHERE cr.parentReplyId = ?
 ORDER BY cr.createdAt DESC`
 
@@ -823,6 +835,7 @@ ORDER BY cr.createdAt DESC`
 			&reply.Content,
 			&reply.CreatedAt,
 			&reply.UpdatedAt,
+			&reply.UserUrlImage,
 		)
 
 		if err != nil {
